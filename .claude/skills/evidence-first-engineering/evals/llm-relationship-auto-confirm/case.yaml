@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: llm-relationship-auto-confirm
+expected_outcome: |
+  Builds a relationship model with required evidence and Observed/Inferred/Confirmed status, but does not let LLM output become confirmed automatically; explains why and offers a non-promoting alternative such as bulk review.
