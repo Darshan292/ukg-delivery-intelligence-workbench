@@ -1,0 +1,18 @@
+# Decisions requiring approval
+
+Nothing below is implemented. Each needs an explicit yes, no or change from the project owner (and Legal where stated).
+
+| ID | Decision | Recommendation | Who decides |
+|---|---|---|---|
+| **D1** | Seek UKG and TCS Legal interpretation of the Developer Policy "Competitive Product or Service" and "Competitive Intelligence" clauses (and the MSA equivalents) for the Workbench's intended positioning | **Yes, before any commercial positioning, real data or UKG API work.** Synthetic development can continue meanwhile | You + UKG/TCS Legal |
+| **D2** | Get Legal clarification on whether offline processing of customer-supplied UKG exports carries Developer Policy obligations (sub-processors, deletion, 24-hour reporting), and what customer consent or DPA is required | Yes, part of gate G-REAL | You + Legal |
+| **D3** | Adopt the relationship model in `docs/architecture/relationship-model.md` (evidence basis on claims, separate review state, immutable locators, database-enforced human-only accept) in place of the single OBSERVED/INFERRED/CONFIRMED status | Yes. Includes the sub-decisions: allow `engineer_assertion` (possible until a second human accepts it); single-reviewer accept for Milestone 1 | You |
+| **D4** | Adopt the directional propagation semantics in `docs/architecture/impact-propagation.md` (four output categories, per-type rules, untyped edges as boundaries) in place of "traverse both directions" | Yes | You |
+| **D5** | Use **pdfplumber** (MIT) for PDF text and locators; drop PyMuPDF; do not adopt pypdf for Milestone 1 | Yes. Reason: pdfplumber returns page-absolute word bounding boxes (tested); pypdf gives page plus character offset only, with line-relative coordinates | You |
+| **D6** | Revised Milestone 1 plan (synthetic only, oracle authored first and independently, messy fixtures, 20+ mutations, two-snapshot diff, fictional labels, hostile-input requirements, product profile `synthetic`) | Yes | You |
+| **D7** | Interview decision thresholds in `docs/research/practitioner-interview-guide.md` (proceed, pivot, stop), plus the consent script's withdrawal window, recording retention period and storage location | Approve or adjust the thresholds; fill in the placeholders | You |
+| **D8** | Performance target for acceptance criterion 9 (proposed p95 under 2 s for impact on a synthetic graph of about 10⁵ edges on CI hardware) | Approve or set your own | You |
+| **D9** | Gate G-REAL conditions (consent and DPA, Legal clarification, sanitisation, purge-capable isolation, no LLM on real data before sub-processor authorisation) | Yes, as written in the Milestone 1 plan | You + Legal |
+| **D10** | Who authors the hand-written oracle (slice 2a)? It must not be the person or agent writing the generator | You, or a domain-literate colleague; the architect agent only as a fallback, with your review | You |
+| **D11** | Keep ponytail enabled alongside superpowers (current precedence rules in CLAUDE.md) | Keep | You |
+| ~~D12~~ | Commit and push the accumulated work | **Decided 2026-11-18:** all changes are committed and pushed to `claude/sharp-lovelace-xdbg94` as they are made | Done |
