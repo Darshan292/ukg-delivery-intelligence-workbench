@@ -1,56 +1,77 @@
 ---
 name: evidence-first-engineering
-description: Provenance and relationship-status rules for this repo's data pipeline. Use whenever you design, write or review code for document ingestion, parsing (PDF, Word, Excel, CSV), the canonical intermediate representation, entity or relationship extraction, LLM-assisted extraction, the graph store, review/approval flows, or any model, table or API that holds extracted entities or relationships, even for a "quick" parser or fixture.
+description: Provenance, claim and review rules for this repo's data pipeline. Use whenever you design, write or review code for document ingestion, parsing (PDF, Word, Excel, CSV, XML, JSON), the canonical intermediate representation, entity identity, snapshots, entity or relationship extraction, LLM-assisted extraction, the graph store, review/approval flows, or any model, table or API that holds extracted entities, claims, evidence or relationships, even for a "quick" parser or fixture.
 ---
 
 # Evidence-first engineering
 
-The workbench is only useful if an engineer can click any fact and see where it came from. Every shortcut that drops provenance turns the graph into an opinion. These rules keep the chain from source byte to graph edge intact.
+The workbench is only useful if an engineer can click any fact and see where it came from, and trust that no machine decided it was true. These rules keep the chain intact from source byte to graph edge.
 
-## Provenance on every extracted thing
+**Authoritative model:** `docs/architecture/relationship-model.md` (rev 2). It becomes binding when decision D3 is approved; until then, no code depends on it. This skill states the rules; the document has the schema, the options considered and the derivation details. If the two ever disagree, fix the disagreement. Do not pick one silently.
 
-Every entity and relationship carries at least one evidence reference. Model it as a required, typed field (Pydantic), not an optional dict, so missing provenance fails validation instead of shipping.
+## Core concepts
 
-An evidence reference holds:
+- **Entity:** a stable identity (`product_profile`, `entity_type`, `natural_key`). Never physically merged or rewritten.
+- **EntityVersion:** an entity's attributes as one document version states them. Snapshot diffs compare these.
+- **Relationship:** a typed edge between two entities (plus `qualifier` where the type needs it). It carries no scope and no status column.
+- **Claim:** one way we came to know an edge. It has a basis, method, polarity (`present`/`absent`), scope and ≥1 immutable evidence locator.
+- **ReviewEvent:** an append-only human verdict on a claim or on a relationship.
+- **Snapshot:** one configuration capture (profile, environment, label, time). Before/after and dev/prod are both pairs of snapshots.
 
-- `document_id` and the source file's `sha256` (so a re-uploaded, changed file is a different source)
-- original file name and detected `product_profile`
-- the most precise location the format allows: `page` (+ bbox if known) for PDF; `sheet`, `row`, `column`/`cell` for spreadsheets; `section`/`paragraph` for documents; line for text/CSV
-- the verbatim snippet or cell value the claim rests on
-- `extractor` name and version, and extraction timestamp
+Everything else (effective state, display labels, conflicts, edge tier) is **derived** by deterministic code and never stored.
 
-If a location is unknown, store `null` explicitly; never guess a page or row. Transformations (IR building, normalisation, merging duplicates) carry evidence forward; a merged entity keeps the union of its sources.
+## Evidence locators
 
-## Relationship status
+Every claim and every EntityVersion points to ≥1 locator. A locator is **immutable** and points at a **content-hashed document version** (sha256), never at a file name. Re-uploading a changed file creates a new version, and old locators keep resolving.
 
-> **Pending decision D3:** `docs/architecture/relationship-model.md` proposes replacing the single status below with a separate evidence basis per claim (explicit source, deterministic rule, LLM suggestion), a review state (unreviewed, accepted, rejected, superseded) and immutable locators. Once D3 is approved, that document governs, and the labels below become derived display labels. The LLM-boundary rules in this skill apply either way.
-
-Each relationship has exactly one status:
-
-| Status | Meaning | Required |
+| Source | Locator kind | Locator fields |
 |---|---|---|
-| `observed` | Directly stated by a source (a cell names the referenced object, a document says X uses Y) | evidence reference(s) |
-| `inferred` | Derived by a rule or an LLM, not stated verbatim | evidence references, `method` (rule id or model + prompt version), `confidence` 0–1, short rationale |
-| `confirmed` | A named human reviewed and accepted it | reviewer, timestamp, note, plus the original evidence |
+| Spreadsheet | `xlsx_cell` | sheet, row, column/cell (formula text and cached value read separately) |
+| PDF | `pdf_bbox` | page, x0, top, x1, bottom (pdfplumber word boxes) |
+| Word document | `docx_paragraph` | section/paragraph index |
+| CSV | `csv_row` | row (and column) |
+| XML | `xml_xpath` | an absolute XPath to the element or attribute, parsed with defusedxml |
+| JSON | `json_pointer` | an RFC 6901 JSON Pointer |
 
-Why `observed` and `confirmed` differ: observed means the document says it; confirmed means a person vouches it is true in this configuration. Documents can be stale.
+Each locator also stores the verbatim snippet or value, and the extractor name, version and extraction time. If a location is unknown, store `null` explicitly; never guess a page, row or path. **A locator must resolve:** reopening the source at the locator returns the stored snippet. Transformations carry evidence forward. Nothing merges entities; identity goes through `same_as`.
 
-## The LLM boundary
+## Evidence basis (on each claim)
 
-LLMs help with extraction, explanation and suggestions. They are never the authority.
+| Basis | Produced by | Must carry |
+|---|---|---|
+| `explicit_source` | A deterministic parser reading an explicit reference | extractor@version |
+| `deterministic_rule` | A versioned rule (ID mention, value match) | rule id@version, confidence |
+| `llm_suggestion` | An LLM (Milestone 2 or later; **none in Milestone 1**) | model id, prompt version, confidence, a span verified to exist in the source |
 
-- Anything an LLM produces enters as `inferred` (or as a candidate awaiting review), never `observed` or `confirmed`, whatever confidence it reports.
-- The only path to `confirmed` is an explicit, recorded human action. No code path, batch job, threshold or "auto-accept above 0.9" may promote status.
-- LLM output must point at evidence that exists in our store; reject outputs that cite locations we cannot resolve.
-- Store the model id and prompt version with inferred relationships so results are reproducible and auditable.
+Many claims may support one relationship; a claim is deduplicated on (relationship, basis, method, polarity, locator set). **Basis strength** is the strongest live, present claim: explicit > rule > LLM. Confidences are never summed or combined.
+
+## Review: two targets, humans only
+
+- **Claim verdicts** (`rejected`, `reinstated`) judge whether a source is still valid evidence. Rejecting one stale source leaves the other claims live.
+- **Relationship verdicts** (`accepted`, `rejected`, `superseded` with a required successor) judge whether the link is true **in a snapshot**. Acceptance never carries over to another snapshot automatically.
+- A claim is **superseded** only through document lineage, when a human declares that a new upload replaces the old version. Ingestion never changes a verdict. An accepted edge that loses all evidence keeps its verdict and is flagged `SUPPORT LOST`.
+- Effective state per (relationship, snapshot) is `accepted`, `rejected`, `superseded`, `unreviewed`, or `unsupported` (no live evidence and no verdict). `unsupported` is not `rejected`.
+- OBSERVED, INFERRED and CONFIRMED are **derived display labels only**: unreviewed explicit, unreviewed rule or LLM, and accepted. Never store them as a status.
+
+## The machine boundary
+
+LLMs and rules propose; only a named human decides.
+
+- No code path, batch job, threshold or "auto-accept above 0.9" creates any ReviewEvent or lineage declaration. This is enforced in three layers: the database (only human actors with the reviewer role may insert review events; the ingestion role has no insert privilege; append-only tables), the API (human session only; the actor comes from the session, never from the request body), and tests.
+- LLM output must cite locators that exist in our store; reject outputs that cite locations we cannot resolve.
+- Conflicts (polarity, cardinality, documentary-only, identity, attribute value) are derived flags. They are surfaced, never resolved silently, and they cap affected paths at *possible*.
+- `same_as` is how identity works, without merging. An unreviewed `same_as` caps paths at *possible*, even when its basis is explicit; a rejected one is never crossed.
 
 ## Tests that guard the rules
 
-When you add or change these models/flows, include tests that fail if:
+When you add or change these models or flows, include tests that fail if:
 
-- an entity or relationship validates without evidence
-- an `inferred` relationship validates without confidence or method
-- any non-human code path produces `confirmed`
-- a transformation drops evidence from its inputs
+- a claim or entity version validates without a resolvable locator;
+- a rule or LLM claim validates without method and confidence;
+- a non-human actor can insert any review event or lineage declaration (test at the database, not only the API);
+- re-ingestion changes a verdict or deletes or rewrites an entity, claim or locator;
+- rejecting one claim invalidates other live claims on the same relationship;
+- acceptance in one snapshot changes state in another;
+- a conflict disappears without an evidence or verdict change.
 
-Use synthetic documents only.
+Use synthetic documents only (`product_profile = synthetic`; see `ukg-domain-guardrails`).

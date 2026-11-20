@@ -43,7 +43,8 @@ Whether the product is a "competitive product" is for Legal (decision D1). Never
 - Solution size: ponytail. When the two pull different ways, superpowers decides the process and the tests; ponytail decides how much code. Ponytail never removes tests, validation, provenance or security.
 - Docs: use Context7 for current framework docs when it is connected; otherwise read the official docs and note the version checked.
 - Frontend tasks use `frontend-design`; `security-guidance` applies everywhere.
-- Commit and push every change to the working branch as you go (user's standing instruction, 2026-11-18). Never push to other branches or rewrite history without asking.
+- Branching (Dev Team Directive 01, rule 3): work happens on a feature branch, which is committed and pushed at least daily; changes reach `main` only through a reviewed pull request. Never push directly to `main` and never rewrite history without asking.
+- No new planning documents until Step 1 (Slice 0 plus the tracer bullet) ships. A design question that blocks code gets a decision record of at most one page.
 
 ## Delegating by complexity
 

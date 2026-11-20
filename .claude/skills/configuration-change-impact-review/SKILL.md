@@ -7,7 +7,7 @@ description: Deterministic impact analysis for configuration changes. Use whenev
 
 Engineers use this to decide whether a change can go to a customer. A missed impact means a payroll or integration incident; a false "safe" is the worst output this product can produce. So the analysis is deterministic, directional, explainable path by path, and honest about what it cannot see.
 
-The full semantics, including the propagation rule for every relationship type, are in `docs/architecture/impact-propagation.md`. The edge-status model is in `docs/architecture/relationship-model.md`. Read both before changing traversal code.
+The full semantics, including the change and deletion rules for every relationship type, are in `docs/architecture/impact-propagation.md` (rev 2). The claim, review and edge-tier model is in `docs/architecture/relationship-model.md` (rev 2). Both become binding when decisions D3 and D4 are approved. Read both before changing traversal code; if this skill and those documents disagree, fix the disagreement.
 
 ## Determinism
 
@@ -16,18 +16,19 @@ The full semantics, including the propagation rule for every relationship type, 
 
 ## Method
 
-1. **Derive the change set by diffing two snapshots** (before/after IR: added, removed, modified with field-level changes). Never accept a hand-typed change description as the seed.
+1. **Derive the change set by diffing two snapshots** (entities added, removed or modified with field-level changes, plus links added or removed). Never accept a hand-typed change description as the seed. Attribute values come only from the snapshot's authoritative export. A seed inherits the tier of the link or attribute conflict that created it.
 2. **Traverse directionally.** Follow only edge types whose propagation rule carries a change in the direction of travel. Reachability in an undirected graph is not impact. Edge types without a rule are not traversed; they are reported as boundaries. Skip rejected and superseded edges. Detect cycles; enforce a depth limit and report cut-offs.
-3. **Sort results into four categories**, never merged:
-   - *Impact candidates*: may change behaviour, output or validity.
+3. **Sort results into six kinds**, never merged:
+   - *Impact candidates*: modelled objects whose behaviour or output may change. Traversal continues only through these.
+   - *Re-validation tasks*: work items (re-run a test, update a hard-coded expected value, recheck a requirement or mapping row). They are not impacts, and traversal stops there.
+   - *Coverage gaps*: absences, such as an affected requirement or integration with no live test link. They are evaluated only for affected objects, not the whole graph.
    - *Upstream constraints*: one hop against propagation from each seed. They constrain the change; they are not impacted.
-   - *Context*: non-propagating links (documents, past defects).
-   - *Not modelled / unknown boundaries*: unparsed sources, unknown product profile, untyped edges, external systems, depth cut-offs.
-4. **Tier impact candidates:**
-   - *Established*: at least one path made only of established edges (human-accepted, or unreviewed with an explicit source reference). "Established" means documented or accepted, not verified against UKG runtime behaviour.
-   - *Possible*: every path contains a rule- or LLM-based unreviewed edge. Show the weakest edge's basis, method and confidence.
-   Do not use the word "confirmed" for impact tiers. CONFIRMED/accepted describes a human review of an edge, not an impact.
-5. **Check coverage.** Every affected requirement and integration lists its linked tests. No test ⇒ coverage gap. Tests that hard-code the old value are flagged.
+   - *Context*: non-propagating links (documents, past defects, documentation mismatches).
+   - *Not modelled / boundaries*: unparsed sources, `unknown` profile, untyped edges, dangling references, external systems, depth cut-offs.
+4. **Tier every entry:**
+   - *Established*: at least one triggering path in which every edge is established, meaning human-accepted, or unreviewed with explicit-source support, no conflict, and not `same_as`. "Established" means documented or accepted, not verified against UKG runtime behaviour.
+   - *Possible*: otherwise. Show the weakest edge's basis, method and confidence, and name any conflict.
+   Do not use the word "confirmed" for impact tiers; CONFIRMED is a display label for a human-accepted edge, not an impact. Excluded edges (rejected, superseded, unsupported) are never traversed.
 
 ## Never say "safe"
 
@@ -38,10 +39,11 @@ Passing tests only prove the behaviour those tests check. Never declare a change
 ```
 Change set (from snapshot diff): <object.attribute: before → after>
 Impact candidates — established: <node> via <path>  (evidence refs)
-Impact candidates — possible:    <node> via <path>  (weakest edge: <basis>, <method>, confidence <x>)
+Impact candidates — possible:    <node> via <path>  (weakest edge: <basis>, <method>, confidence <x>; conflict: <kind>)
+Re-validation tasks:             <test / requirement / mapping row>: <re-run | update expected value old → new | recheck>  (tier)
 Upstream constraints:            <node> (<relationship>)
 Context:                         <document / defect> on <node>
-Coverage gaps:                   <requirement or integration> has no linked test; <test> hard-codes old value
+Coverage gaps:                   <requirement or integration> has no live test link
 Not modelled / boundaries:       <what the analysis could not see, and why>
 ```
 

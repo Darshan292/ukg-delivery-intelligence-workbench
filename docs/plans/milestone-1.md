@@ -53,7 +53,7 @@ The change set is **derived by diffing the two snapshots**. It is never written 
 | # | Slice | Done when | Design | Build | Check |
 |---|---|---|---|---|---|
 | 0 | Repo scaffold: `backend/` (uv, FastAPI, Pydantic, pytest, ruff, pyright), `frontend/` (Next.js, TS, Tailwind, shadcn/ui, React Flow), CI, Postgres via `initdb` test fixture (Docker unavailable in cloud) | All checks pass in CI | architect | implementer | scout |
-| 1 | Domain model per `docs/architecture/relationship-model.md` (after approval D3): Relationship, Claim (basis), EvidenceLocator (immutable), ReviewEvent (append-only), Actor; product profile including `synthetic` and `unknown` | Validators reject claims without locators, rule or LLM claims without method and confidence, and any accept or reject by a non-human actor | architect | implementer | architect |
+| 1 | Domain model per `docs/architecture/relationship-model.md` rev 2 (after D3): Actor (immutable kind), Snapshot, Document, DocumentVersion (lineage), EvidenceLocator (immutable; xlsx_cell, pdf_bbox, docx_paragraph, csv_row, xml_xpath, json_pointer), Entity, EntityVersion, Relationship, Claim (basis, polarity, scope), ReviewEvent (claim and relationship targets, append-only), UnresolvedReference; product profiles include `synthetic` and `unknown` | Validators and tests per the model's "invariants to test" | architect | implementer | architect |
 | 2a | **Oracle first:** hand-authored expected impact set and mutation catalogue | Reviewed and frozen before 2b starts | architect | (human or architect) | — |
 | 2b | Synthetic generator: before and after snapshots, messy variants, PDF, test inventory, all fictional-labelled | Byte-stable regeneration (test); the generator never reads the oracle | — | implementer | scout |
 | 3 | Ingestion foundation with hostile-input defences (see below); parse xlsx with **openpyxl** (cell coordinates, formula text and cached value read separately), PDF with **pdfplumber** (page and word bounding box) into IR fragments | Every fragment has a resolvable locator; all hostile-input tests pass | architect (trust boundary) | implementer | architect security review |
@@ -61,7 +61,7 @@ The change set is **derived by diffing the two snapshots**. It is never written 
 | 5 | Storage: Postgres schema plus Alembic migrations; review endpoint; **database-enforced human-only accept and reject** (constraint trigger plus role privileges) | A direct SQL insert of an accept by a service actor fails (test) | architect | implementer | architect |
 | 6 | Snapshot diff (stable keys, field-level) plus directional traversal per `impact-propagation.md`; API endpoints `/graph`, `/entities/{id}/evidence`, `/impact` | Oracle exact match; 20+ mutations detected; deterministic hash; differential check | architect | implementer | architect |
 | 7 | Graph view: React Flow for **bounded subgraphs only** (impact neighbourhood); line style by display label; evidence panel (document, locator, snippet) | Playwright CLI on localhost: renders, click shows evidence, statuses distinguishable | implementer (`frontend-design`) | implementer | scout |
-| 8 | Impact report (API and UI) in the skill's report shape: established, possible, upstream constraints, context, coverage gaps, not modelled | Oracle match; no "safe" wording (string test); no pay amounts | architect | implementer | architect milestone review |
+| 8 | Impact report (API and UI) in the skill's report shape: change set; impact candidates (established, possible); **re-validation tasks**; coverage gaps; upstream constraints; context; not modelled | Oracle match; no "safe" wording (string test); no pay amounts | architect | implementer | architect milestone review |
 
 ## Ingestion security requirements (slice 3)
 
@@ -84,9 +84,9 @@ The change set is **derived by diffing the two snapshots**. It is never written 
 | 1 | Locator integrity | 100% of claims resolve to a locator that reopens the stored snippet (automated) |
 | 2 | Determinism | Two runs give byte-identical reports (hash) |
 | 3 | Independent correctness | Exact match to the hand-authored oracle; 100% of at least 20 mutations detected as stated |
-| 4 | Categories | Report has established, possible (weakest edge shown), upstream constraints, context, coverage gaps, not modelled; no "safe" wording; no pay amounts |
-| 5 | Coverage | A requirement without a test and a test hard-coding "40" are both reported |
-| 6 | Human-only accept | Database rejects accept or reject by a non-human actor; every transition has actor, timestamp and reason where required |
+| 4 | Output kinds | Report has the change set, established and possible impact candidates (weakest edge and any conflict shown), re-validation tasks, coverage gaps, upstream constraints, context and not modelled; no "safe" wording; no pay amounts |
+| 5 | Coverage and re-validation | A requirement with no live test is reported as a coverage gap; the test hard-coding "40" is reported as a re-validation task (update expected value 40 → 37.5) |
+| 6 | Human-only review | The database rejects any review event (claim or relationship) and any lineage declaration by a non-human actor, and rejects changing an actor's kind; every event has actor, timestamp and reason where required |
 | 7 | Hostile input | All hostile-file tests reject safely |
 | 8 | Messy input | Every messy variant yields the stated boundaries or claims; no crash, no silent drop |
 | 9 | Performance | Traversal on a synthetic hub-heavy graph of about 10⁵ edges meets a team-set p95 target on CI hardware (target to be set in D8) |

@@ -4,4 +4,4 @@ focus: trace
 weight: 1
 ---
 
-LLM-produced relationships are never set to confirmed status by code, regardless of confidence.
+No code path lets LLM output accept a relationship (create an accepted review verdict or an accepted/confirmed state), regardless of confidence; acceptance requires a named human reviewer.
