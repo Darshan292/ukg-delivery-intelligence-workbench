@@ -1,6 +1,6 @@
 # Impact propagation semantics
 
-Status: **proposal rev 2, awaiting approval (D4); not implemented.** It replaces "traverse both directions". Items marked *Recommendation* are proposals for you to choose.
+Status: **rev 2, approved 2026-11-20 (D4); not yet implemented.** It replaces "traverse both directions". Items marked *Recommendation* are proposals for you to choose.
 
 ## Changes from rev 1
 

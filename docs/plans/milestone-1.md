@@ -1,6 +1,6 @@
 # Milestone 1: synthetic evidence-to-impact slice (proposal, revision 2)
 
-Status: proposed, not started; awaiting approval (`docs/decisions-for-approval.md`). Each slice becomes its own superpowers `writing-plans` plan and is built test-first.
+Status: approved 2026-11-20 (D6), not started (`docs/decisions-for-approval.md`). Each slice becomes its own superpowers `writing-plans` plan and is built test-first.
 
 Revision 2 reconciles the plan with the research report (`reports/UKG delivery intelligence research.md`) and the UKG Developer Policy note: PyMuPDF removed, impact tiers renamed and extended, an independent oracle, messy fixtures and mutation tests, a two-snapshot diff, fictional labelling, hostile-input requirements, and a synthetic-only scope with a future approval gate.
 
@@ -13,7 +13,7 @@ Prove the engine on synthetic data. Two configuration snapshots and supporting d
 - Milestone 1 uses **synthetic data only**. No real customer artefacts, no UKG tenant connection, no UKG Data Interface, no LLM.
 - **Future approval gate (G-REAL)** before any authorised, sanitised real artefact enters the system, all of:
   1. written customer consent and a DPA naming the purpose, retention and deletion terms;
-  2. Legal clarification of the UKG Developer Policy's applicability to offline customer-supplied exports, and of the competitive-product clause (UKG and TCS Legal);
+  2. Legal clarification of the UKG Developer Policy's applicability to offline customer-supplied exports, and of the competitive-product clause (independent legal review, and where needed UKG's own interpretation);
   3. a sanitisation procedure (no person records, no PII, customer identifiers pseudonymised), checked by a second person;
   4. per-customer isolated storage with tested purge, including backups and derived data;
   5. no LLM processing of real artefacts until the provider is an authorised sub-processor (Developer Policy §5), and no model evaluation on real data without customer and UKG written consent (§4).

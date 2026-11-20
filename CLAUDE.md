@@ -24,7 +24,7 @@ Status: research done; no application code yet. Read before building: `docs/plan
 9. Never invent savings, performance numbers or product capabilities.
 10. Synthetic data only. No real employee or customer data until gate G-REAL (Milestone 1 plan) is approved, and never person records.
 
-Relationships: follow the proposed model in `docs/architecture/relationship-model.md` once decision D3 is approved. Evidence basis (explicit source, deterministic rule, LLM suggestion) is separate from review state (unreviewed, accepted, rejected, superseded). Only a human can accept or reject, and this is enforced in the database. Impact analysis is directional (`docs/architecture/impact-propagation.md`): established, possible and not-modelled categories, never "confirmed impacts", never "safe".
+Relationships: follow the model in `docs/architecture/relationship-model.md` (rev 2, binding: decisions D3 and D4 approved 2026-11-20). Evidence basis (explicit source, deterministic rule, LLM suggestion) is separate from review state (unreviewed, accepted, rejected, superseded). Only a human can accept or reject, and this is enforced in the database. Impact analysis is directional (`docs/architecture/impact-propagation.md`): established, possible and not-modelled categories, never "confirmed impacts", never "safe".
 
 UKG Pro WFM and Workforce Central are separate product profiles (skill `ukg-domain-guardrails`). Change-impact logic follows skill `configuration-change-impact-review`. There is no live access to UKG tenants, Workday, Boomi or ServiceNow: do not build or test against them.
 
@@ -35,7 +35,7 @@ UKG Developer Policy (`research_notes/UKG delivery intelligence research/verifie
 - no model training or evaluation on customer data;
 - no LLM or host as a sub-processor of customer data without UKG written authorisation.
 
-Whether the product is a "competitive product" is for Legal (decision D1). Never assert that it is permitted or prohibited.
+Whether the product is a "competitive product" is for independent legal review (decision D1, open). Never assert that it is permitted or prohibited.
 
 ## How we work
 
@@ -64,3 +64,14 @@ Escalate when a lower tier reports ambiguity; never let a lower tier make an arc
 - Playwright CLI (skill `playwright-cli`) for UI checks against a localhost server (`file://` is blocked). No Playwright MCP.
 - LSP: Pyright and typescript-language-server (TypeScript pinned to 6.x: TypeScript 7 has no tsserver).
 - Fresh cloud machine: `scripts/setup-claude-tools.sh` installs or verifies all CLI tools (`--check` to verify only).
+
+## Licensing
+
+Apache-2.0 (`LICENSE`, `NOTICE`). Every new source file (Python, TypeScript/JavaScript, shell, SQL, CSS, config code) starts with:
+
+```
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
+```
+
+in the file's comment syntax. Markdown and data fixtures are exempt. Every dependency must pass the licence gate: MIT, BSD, Apache-2.0, ISC, PSF and MPL-2.0 are allowed, and LGPL is allowed for dev-only use. GPL, AGPL, SSPL, BSL and non-commercial licences are rejected. No paid services, no real data, and no claims that haven't been measured.

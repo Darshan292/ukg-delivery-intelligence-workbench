@@ -52,3 +52,14 @@ When the user types `/graphify`, use the installed graphify skill or instruction
 ## Project rules
 
 Project engineering rules, architecture and delegation policy are in `CLAUDE.md`; domain rules are in `.claude/skills/*/SKILL.md`. They apply to every agent.
+
+## Licensing
+
+Apache-2.0 (`LICENSE`, `NOTICE`). Every new source file (Python, TypeScript/JavaScript, shell, SQL, CSS, config code) starts with:
+
+```
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
+```
+
+in the file's comment syntax. Markdown and data fixtures are exempt. Every dependency must pass the licence gate: MIT, BSD, Apache-2.0, ISC, PSF and MPL-2.0 are allowed, and LGPL is allowed for dev-only use. GPL, AGPL, SSPL, BSL and non-commercial licences are rejected. No paid services, no real data, and no claims that haven't been measured.

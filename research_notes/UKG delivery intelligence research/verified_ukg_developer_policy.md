@@ -4,7 +4,7 @@
 **Retrieved:** 2026-11-18, full text, via the page's markdown rendition (`…/developer-policy.md`, HTTP 200). Page metadata `updatedAt: 2026-09-30T19:27:09Z`. SHA-256 of the retrieved text: `1bf9782bf4412058cceb6904d1eb31ccb88e170448aea68a34740f8e29004b1a`.
 **Status:** primary-read. Every quote below is verbatim. Interpretation is labelled **[Inference]** and is not legal advice.
 
-> **Not a conclusion on legality.** This note does not decide whether the Workbench is prohibited or permitted. Several clauses, above all "Competitive Product or Service", need interpretation by UKG and TCS Legal. The note maps what the policy says onto what we plan to do, and lists who must approve what.
+> **Not a conclusion on legality.** This note does not decide whether the Workbench is prohibited or permitted. Several clauses, above all "Competitive Product or Service", need independent legal review (and, where needed, UKG's own interpretation) before any commercial use or real data. The note maps what the policy says onto what we plan to do, and lists who must approve what.
 
 ## 1. Scope: what the policy governs
 
@@ -32,7 +32,7 @@
 ### 2.3 Competitive products and competitive intelligence (§4)
 - **Competitive Product or Service:** "Creating a competitive product or service to UKG's offerings."
 - **Competitive Intelligence:** "Using UKG data to benchmark, analyze, or inform products that compete with UKG offerings."
-- "Offerings" is not defined. **[Inference]** UKG offers Setup Data Manager with a compare function, Bryte AI, a reported "UKG in Claude" integration, implementation services and a Pro WFM Migration Assessment service. Depending on interpretation, drift comparison, AI explanation or migration assurance could be read as competing. Equally, an assurance layer over artefacts UKG does not hold (requirements, test inventories, defects) may not be. **Only UKG and TCS Legal can decide this.** The second clause matters as well: using UKG data to "inform" a competing product could reach the use of real configuration to design our rules.
+- "Offerings" is not defined. **[Inference]** UKG offers Setup Data Manager with a compare function, Bryte AI, a reported "UKG in Claude" integration, implementation services and a Pro WFM Migration Assessment service. Depending on interpretation, drift comparison, AI explanation or migration assurance could be read as competing. Equally, an assurance layer over artefacts UKG does not hold (requirements, test inventories, defects) may not be. **Only independent legal review (and, where needed, UKG's own interpretation) can decide this.** The second clause matters as well: using UKG data to "inform" a competing product could reach the use of real configuration to design our rules.
 
 ### 2.4 Cross-tenant data aggregation (§4)
 - "Aggregating or comparing data across multiple Customer tenants without a signed Data Sharing Agreement and consent from all involved tenants. This includes anonymized or aggregated benchmarking data derived from multiple tenants unless explicitly authorized under a Data Sharing Agreement."

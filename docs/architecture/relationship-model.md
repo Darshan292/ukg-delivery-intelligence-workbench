@@ -1,6 +1,6 @@
 # Proposed canonical relationship model
 
-Status: **proposal rev 2, awaiting approval (D3); not implemented.** Items marked *Recommendation* are proposals for you to choose, not decisions.
+Status: **rev 2, approved 2026-11-20 (D3); not yet implemented.** Items marked *Recommendation* are proposals for you to choose, not decisions.
 
 ## Changes from rev 1
 

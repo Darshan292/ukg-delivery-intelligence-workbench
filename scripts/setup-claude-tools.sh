@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 # Installs the CLI tooling Claude Code uses on this repo: uv, Graphify, Playwright CLI,
 # Pyright and the TypeScript language server. Idempotent: tools already at the pinned
 # version are left alone. Contains no credentials and needs none.

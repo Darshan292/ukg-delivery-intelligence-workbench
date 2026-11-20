@@ -7,7 +7,7 @@ description: Provenance, claim and review rules for this repo's data pipeline. U
 
 The workbench is only useful if an engineer can click any fact and see where it came from, and trust that no machine decided it was true. These rules keep the chain intact from source byte to graph edge.
 
-**Authoritative model:** `docs/architecture/relationship-model.md` (rev 2). It becomes binding when decision D3 is approved; until then, no code depends on it. This skill states the rules; the document has the schema, the options considered and the derivation details. If the two ever disagree, fix the disagreement. Do not pick one silently.
+**Authoritative model:** `docs/architecture/relationship-model.md` (rev 2). It is binding (decision D3 approved 2026-11-20). This skill states the rules; the document has the schema, the options considered and the derivation details. If the two ever disagree, fix the disagreement. Do not pick one silently.
 
 ## Core concepts
 

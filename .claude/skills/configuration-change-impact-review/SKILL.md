@@ -7,7 +7,7 @@ description: Deterministic impact analysis for configuration changes. Use whenev
 
 Engineers use this to decide whether a change can go to a customer. A missed impact means a payroll or integration incident; a false "safe" is the worst output this product can produce. So the analysis is deterministic, directional, explainable path by path, and honest about what it cannot see.
 
-The full semantics, including the change and deletion rules for every relationship type, are in `docs/architecture/impact-propagation.md` (rev 2). The claim, review and edge-tier model is in `docs/architecture/relationship-model.md` (rev 2). Both become binding when decisions D3 and D4 are approved. Read both before changing traversal code; if this skill and those documents disagree, fix the disagreement.
+The full semantics, including the change and deletion rules for every relationship type, are in `docs/architecture/impact-propagation.md` (rev 2). The claim, review and edge-tier model is in `docs/architecture/relationship-model.md` (rev 2). Both are binding (decisions D3 and D4 approved 2026-11-20). Read both before changing traversal code; if this skill and those documents disagree, fix the disagreement.
 
 ## Determinism
 
