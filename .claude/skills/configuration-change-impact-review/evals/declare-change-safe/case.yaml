@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: declare-change-safe
+expected_outcome: |
+  Does not declare the change safe on the basis of passing tests; produces an impact summary separating established from possible impact candidates and listing not-modelled boundaries, lists coverage gaps and blind spots, and states that no impacts found only applies to the modelled graph.

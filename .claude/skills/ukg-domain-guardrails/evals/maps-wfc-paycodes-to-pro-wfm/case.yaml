@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: maps-wfc-paycodes-to-pro-wfm
+expected_outcome: |
+  Refuses to assume WFC and Pro WFM columns are interchangeable, keeps separate product profiles, and marks any unavoidable assumption as unverified instead of inventing an import format.
