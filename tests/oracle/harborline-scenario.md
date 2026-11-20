@@ -206,12 +206,12 @@ The §4 PDF table yields only R13. It is not also extracted as `mentions` (fixtu
 
 No `same_as`, no `absent` claim and no conflict exists in the base scenario. `same_as` and `absent` appear only in mutations.
 
-## 7. Fixture decisions the oracle author should confirm or veto
+## 7. Fixture decisions (confirmed by the owner, 2026-11-20)
 
-These are spec choices, not results. Each is open to the owner's veto before freezing.
+These are spec choices, not results. Items 1, 3 and 4 are confirmed. Item 2 is settled by `docs/decisions/0001-snapshot-scoped-claims.md`.
 
 1. Requirements, Tests and Defects live in the unscoped `harborline-tests.xlsx`, not in the config workbooks. (The plan's sheet list put Requirements and Tests in the config workbook; moving them keeps test and requirement claims unscoped.) A `PayPeriods` sheet is added to the config workbooks for PP-WEEKLY.
-2. R15 and R16 (`implements`) are unscoped relationships (requirement is unscoped) whose claims come from snapshot-assigned exports, so each has one claim scoped to `before` and one to `after`. The model's derived-state rules say "S is ignored when R is unscoped"; how scoped claims on an unscoped relationship count as live is for the owner to apply.
+2. R15 and R16 (`implements`) are unscoped relationships (the requirement is unscoped) whose claims come from snapshot-assigned exports, so each has one claim scoped to `before` and one to `after`. **Settled:** in snapshot context S, a relationship's live claims are its unscoped claims plus the claims scoped to S, whether or not the relationship itself is scoped (decision 0001).
 3. R20's claim cites only the TC-031 cell, so it is unscoped, although the value it matched (40) exists only in `before`.
 4. OT1 exists only through the design PDF (unscoped). REG1 exists through both config exports.
 
@@ -228,7 +228,7 @@ Each mutation is applied alone to the base scenario unless it says "on top of". 
 | M05 | **Removed test link.** tests.xlsx: change TC-017 `verifies` to `OT-WEEKLY` only (R18 removed). |
 | M06 | **Display-only change.** Config `after`: change the `description` of OT-DAILY to "Daily overtime (hourly staff)". |
 | M07 | **Cycle.** Both configs: add a WorkRules column `uses` with value `PR-STANDARD` on WR-HOURLY (new explicit edge WR-HOURLY —uses→ PR-STANDARD in both snapshots). |
-| M08 | **Profile unknown.** Ingest ET-HOURLY (both snapshots) with `product_profile = unknown` (graph-level mutation; its R06 claim is kept). |
+| M08 | **Profile unknown (boundary test).** Ingest ET-HOURLY (both snapshots) with `product_profile = unknown`; its R06 claim is kept. This deliberately places one `unknown`-profile entity next to `synthetic` ones, to test how the analysis treats an entity whose profile is unknown. It is not a valid configuration to model. |
 | M09 | **Depth limit.** Both configs: add integrations INT-CHAIN-1 (`consumes` ET-HOURLY), INT-CHAIN-2 (`consumes` INT-CHAIN-1), INT-CHAIN-3 (`consumes` INT-CHAIN-2), INT-CHAIN-4 (`consumes` INT-CHAIN-3). |
 | M10 | **Polarity conflict.** Design PDF: add §6 sentence "PR-STANDARD no longer uses WR-HOURLY." extracted as an `absent` rule claim on R04 (method `pdf_negation@1`, confidence 0.8). |
 | M11 | **Cardinality conflict.** Design PDF: add §6 sentence "PR-STANDARD uses WR-SALARIED." extracted as a `present` rule claim PR-STANDARD —uses→ WR-SALARIED (method `pdf_sentence@1`, confidence 0.8). |

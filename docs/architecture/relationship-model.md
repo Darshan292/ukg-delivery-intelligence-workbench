@@ -74,7 +74,7 @@ Entity types are catalogued as **snapshot-scoped** (configuration objects, mappi
 
 *Recommendation:* **D2.**
 - A claim's `scope_snapshot_id` is the snapshot of its locators' document versions. The constraint is at most one distinct snapshot per claim; null means unscoped.
-- For a scoped relationship evaluated in snapshot S, the live claims are those scoped to S, plus unscoped claims.
+- Every analysis runs in a snapshot context S. For **any** relationship, scoped or not, the live claims in S are its unscoped claims plus the claims scoped to S (`docs/decisions/0001-snapshot-scoped-claims.md`, approved 2026-11-20).
 - A verdict on a scoped relationship must name S. Verdicts on unscoped relationships have no scope.
 
 **Carry-forward.** Options:
@@ -181,9 +181,9 @@ ReviewEvent(id, target_kind{claim,relationship}, claim_id NULL, relationship_id 
 
 ## Derived-state rules
 
-For relationship R in scope S (S is ignored when R is unscoped):
+For relationship R in snapshot context S (S selects which scoped claims are live, for scoped and unscoped relationships alike; only verdicts on unscoped relationships ignore S):
 
-1. **Live claims** = claims of R that are in scope (scoped to S, or unscoped), not superseded, and whose latest claim event is not `rejected`.
+1. **Live claims** = claims of R that are unscoped or scoped to S, not superseded, and whose latest claim event is not `rejected`.
 2. **Verdict V** = the latest relationship event for (R, S), ordered by `at` then `id`.
 3. **Effective state:**
    - If V = rejected → `rejected`.
