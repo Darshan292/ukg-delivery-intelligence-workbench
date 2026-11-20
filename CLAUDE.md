@@ -46,6 +46,16 @@ Whether the product is a "competitive product" is for independent legal review (
 - Branching (Dev Team Directive 01, rule 3): work happens on a feature branch, which is committed and pushed at least daily; changes reach `main` only through a reviewed pull request. Never push directly to `main` and never rewrite history without asking.
 - No new planning documents until Step 1 (Slice 0 plus the tracer bullet) ships. A design question that blocks code gets a decision record of at most one page.
 
+## Decision autonomy (standing rule from 2026-11-21)
+
+1. Decide anything reversible yourself: code structure, library choice within the licence gate, test design, wording, doc fixes. Record the choice in the PR description. Do not ask.
+2. Escalate only: legal or licence questions; anything that cannot be undone (history rewrites, deletions, publishing); changes to approved D-decisions; anything that changes expected oracle results.
+3. Batch escalations: at most one question list per report, each item with a recommended answer. If the owner does not reply within 24 hours, the recommendation stands and is marked "defaulted".
+4. No new planning or analysis documents during Step 1. An ambiguity found while coding goes into a GitHub issue labelled `decision`, and building continues.
+5. Every report starts with links to the merged commits. A report without them counts as no progress.
+
+Step 1 reports are due on days 3, 6 and 10: 2026-11-23, 2026-11-26 and 2026-11-30 (calendar days; Day 1 is 2026-11-21).
+
 ## Delegating by complexity
 
 Give each delegated task to the cheapest agent that can do it reliably, and pass the agent's model when spawning:
