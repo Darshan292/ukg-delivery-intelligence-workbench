@@ -2,7 +2,7 @@
 
 An evidence-first engineering intelligence platform for UKG implementation, migration and support engineers. It helps them understand configurations, dependencies, changes and their delivery impact. Every fact it shows must trace back to a source.
 
-Status: research done; no application code yet. Read before building: `docs/plans/milestone-1.md` (revision 2), `docs/decisions-for-approval.md` (open decisions), `docs/risk-register.md`, `reports/UKG delivery intelligence research.md`.
+Status: research done; no application code yet. Read before building: `docs/plans/milestone-1.md` (revision 2), `docs/decisions-for-approval.md` (open decisions), `docs/risk-register.md`, `docs/research/research-report.md`.
 
 ## Architecture direction
 
@@ -28,7 +28,7 @@ Relationships: follow the model in `docs/architecture/relationship-model.md` (re
 
 UKG Pro WFM and Workforce Central are separate product profiles (skill `ukg-domain-guardrails`). Change-impact logic follows skill `configuration-change-impact-review`. There is no live access to UKG tenants, Workday, Boomi or ServiceNow: do not build or test against them.
 
-UKG Developer Policy (`research_notes/UKG delivery intelligence research/verified_ukg_developer_policy.md`) constrains future work:
+UKG Developer Policy (`docs/research/notes/verified_ukg_developer_policy.md`) constrains future work:
 - no UKG Data Interface use without registration, customer consent and UKG approval;
 - no AI agents calling UKG APIs;
 - no cross-customer aggregation or benchmarking;
