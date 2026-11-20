@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
+name: backend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  lint-type:
+    if: hashFiles('backend/uv.lock') != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyright
+
+  test:
+    if: hashFiles('backend/uv.lock') != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REQUIRE_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - run: uv sync --locked
+      # pytest-postgresql starts its own server from the runner's PostgreSQL binaries.
+      - run: uv run pytest
+
+  compose:
+    if: hashFiles('backend/uv.lock') != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql+pg8000://tracer:tracer@127.0.0.1:5432/tracer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - run: uv sync --locked --no-dev
+      - run: docker compose up -d --wait db
+        working-directory: .
+      - run: uv run --no-dev alembic upgrade head
+      - run: uv run --no-dev alembic upgrade head # idempotent
+      - name: Assert tables exist
+        working-directory: .
+        run: |
+          tables=$(docker compose exec -T db psql -U tracer -d tracer -tAc \
+            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('entity','relationship','evidence_locator')")
+          test "$tables" = "3"
+      - name: Down
+        if: always()
+        working-directory: .
+        run: docker compose down -v

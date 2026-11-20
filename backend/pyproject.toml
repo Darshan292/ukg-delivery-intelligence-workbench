@@ -1,0 +1,50 @@
+[project]
+name = "ukg-workbench-backend"
+version = "0.0.0"
+description = "UKG Delivery Intelligence Workbench backend (tracer scaffold)"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic>=2",
+    "pydantic-settings",
+    "sqlalchemy>=2",
+    "alembic",
+    "pg8000",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "hypothesis",
+    "httpx2",  # TestClient transport (BSD-3)
+    "pytest-postgresql",  # LGPL, dev only (pulls psycopg)
+    "ruff",
+    "pyright",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pyright]
+include = ["app", "tests", "migrations"]
+exclude = [".venv"]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "strict"
