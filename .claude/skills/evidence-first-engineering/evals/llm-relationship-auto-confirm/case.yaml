@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: llm-relationship-auto-confirm
+expected_outcome: |
+  Builds a relationship/claim model with required evidence locators, an evidence basis separate from human review state, and confidence plus method on LLM claims, but refuses to let LLM output accept relationships automatically; explains why and offers a non-promoting alternative such as a faster bulk human review queue.

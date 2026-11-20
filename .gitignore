@@ -1,0 +1,10 @@
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+
+# Derived graph output (rebuild with: graphify update .)
+graphify-out/
+
+# Local secrets
+.env
+.env.*
+!.env.example
