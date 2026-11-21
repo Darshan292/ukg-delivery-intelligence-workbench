@@ -1,0 +1,91 @@
+# Licence exceptions read by scripts/license_gate.py.
+# Each entry: exact package name, version range, exact licence string, reason, approver, date.
+# No wildcards. Any new entry needs the owner's approval (licence matter): escalate, never add one yourself.
+
+[[exception]]
+name = "@img/sharp-libvips-darwin-arm64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-darwin-x64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-linux-arm"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-linux-arm64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-linux-ppc64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-linux-riscv64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-linux-s390x"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-linux-x64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-linuxmusl-arm64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-libvips-linuxmusl-x64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "caniuse-lite"
+versions = ">=1.0.30001826,<1.1.0"
+licence = "CC-BY-4.0"
+reason = "Browser-support data used by Next.js build tooling (browserslist). Data licence; attribution in NOTICE."
+approved_by = "owner"
+date = 2026-11-21
