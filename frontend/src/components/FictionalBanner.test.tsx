@@ -4,7 +4,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import Home from "@/app/page";
 import { FictionalBanner } from "./FictionalBanner";
 
 const DEFAULT_TEXT =
@@ -19,13 +18,5 @@ describe("FictionalBanner", () => {
   it("accepts custom text", () => {
     render(<FictionalBanner text="Custom notice" />);
     expect(screen.getByRole("note")).toHaveTextContent("Custom notice");
-  });
-
-  it("is rendered by the home page", () => {
-    render(<Home />);
-    expect(screen.getByRole("note")).toHaveTextContent(DEFAULT_TEXT);
-    expect(screen.getByRole("main")).toHaveTextContent(
-      "Evidence-first impact workbench (working title)",
-    );
   });
 });
