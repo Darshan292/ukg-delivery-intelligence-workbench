@@ -3,6 +3,9 @@
 
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  // No next/image optimisation, so the optional LGPL sharp/libvips binaries are never needed.
+  images: { unoptimized: true },
+};
 
 export default nextConfig;
