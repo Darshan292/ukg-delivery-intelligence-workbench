@@ -12,8 +12,6 @@ permissions:
 
 jobs:
   e2e:
-    # Skipped until both manifests exist, so merge order never turns main red.
-    if: ${{ hashFiles('backend/uv.lock') != '' && hashFiles('frontend/package-lock.json') != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
