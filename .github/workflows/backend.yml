@@ -46,8 +46,17 @@ jobs:
           version: "0.11.32"
           enable-cache: false
           python-version: "3.13"
+      # The runner image does not guarantee PostgreSQL server binaries; pytest-postgresql
+      # needs pg_ctl (tests/pg_locate.py finds it under /usr/lib/postgresql/<version>/bin).
+      - name: Ensure PostgreSQL server binaries
+        run: |
+          if ! ls /usr/lib/postgresql/*/bin/pg_ctl >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends postgresql
+          fi
+          ls /usr/lib/postgresql/*/bin/pg_ctl
       - run: uv sync --locked
-      # pytest-postgresql starts its own server from the runner's PostgreSQL binaries.
+      # pytest-postgresql starts its own server from those binaries.
       - run: uv run --frozen pytest
 
   compose:

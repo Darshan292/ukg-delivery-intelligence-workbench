@@ -9,7 +9,6 @@ Set REQUIRE_DB_TESTS=1 (CI) so that a missing Postgres fails instead of skipping
 """
 
 import os
-import shutil
 import uuid
 from collections.abc import Iterator
 
@@ -21,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.main import create_app
+from tests.pg_locate import find_pg_ctl
 
 
 def _no_db(reason: str) -> None:
@@ -33,8 +33,11 @@ def _admin_url(request: pytest.FixtureRequest) -> URL:
     env = os.environ.get("TEST_DATABASE_URL")
     if env:
         return make_url(env)
-    if shutil.which("pg_ctl") is None and not os.path.exists("/usr/lib/postgresql/16/bin/pg_ctl"):
+    pg_ctl = find_pg_ctl()
+    if pg_ctl is None:
         _no_db("pg_ctl not found: install PostgreSQL or set TEST_DATABASE_URL")
+    else:
+        request.config.option.postgresql_exec = pg_ctl  # the plugin's default path rarely exists
     proc = request.getfixturevalue("postgresql_proc")
     return URL.create(
         "postgresql+pg8000",
