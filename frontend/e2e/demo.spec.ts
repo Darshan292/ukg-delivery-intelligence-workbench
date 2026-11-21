@@ -32,12 +32,12 @@ test("tracer walkthrough", async ({ page }) => {
   await page.reload();
   await pause(page, 3);
   await pause(page, 5); // read before acting
-  await page.getByText("implements", { exact: true }).click();
+  await page.locator(".react-flow__edge").filter({ hasText: "implements" }).locator(".react-flow__edge-textbg").click();
   await expect(evidence).toContainText("B2");
   await pause(page, 6); // link 1 from the graph edge label
 
   await pause(page, 5); // read before acting
-  await page.getByText("verifies", { exact: true }).click();
+  await page.locator(".react-flow__edge").filter({ hasText: "verifies" }).locator(".react-flow__edge-textbg").click();
   await expect(evidence).toContainText("B3");
   await pause(page, 6); // link 2 from the graph edge label
 
@@ -48,7 +48,7 @@ test("tracer walkthrough", async ({ page }) => {
 
   await pause(page, 5); // read before acting
   await page.goto("/?entity=NOPE");
-  await expect(page.getByRole("alert")).toContainText("No entity with key NOPE");
+  await expect(page.getByRole("alert").filter({ hasText: "No entity with key NOPE" })).toBeVisible();
   await pause(page, 6); // clear not-found state
 
   await page.goto("/");

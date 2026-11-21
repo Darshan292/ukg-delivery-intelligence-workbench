@@ -4,6 +4,7 @@
 #
 # Start the whole stack (production frontend build), run Playwright, tear everything down.
 # MODE=docker|local (auto: docker if "docker info" works). Exit code is Playwright's.
+# Extra arguments go to Playwright, e.g. E2E_DEMO=1 E2E_VIDEO=1 bash scripts/e2e.sh e2e/demo.spec.ts
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ -z "${MODE:-}" ]; then
@@ -34,5 +35,5 @@ done
 grep -q '^Ready:' .local/e2e-stack.log || { echo "stack not ready:" >&2; tail -n 40 .local/e2e-stack.log >&2; exit 1; }
 
 rc=0
-(cd frontend && npx playwright test) || rc=$?
+(cd frontend && npx playwright test "$@") || rc=$?
 exit "$rc"

@@ -33,18 +33,20 @@ test("selecting a link in the list shows its source locator", async ({ page }) =
 
 test("selecting a link by its graph edge label shows its source locator", async ({ page }) => {
   await page.goto("/");
-  await page.getByText("verifies", { exact: true }).click();
+  // The label text sits under its own background rectangle, which takes the click.
+  await page.locator(".react-flow__edge").filter({ hasText: "verifies" }).locator(".react-flow__edge-textbg").click();
   await expect(page.getByRole("region", { name: "Evidence" })).toContainText("tracer-fixture.xlsx › Links › B3");
 });
 
 test("unknown entity shows a not-found alert", async ({ page }) => {
   await page.goto("/?entity=NOPE");
-  await expect(page.getByRole("alert")).toContainText("No entity with key NOPE");
+  // Next adds its own role="alert" route announcer, so match ours by its text.
+  await expect(page.getByRole("alert").filter({ hasText: "No entity with key NOPE" })).toBeVisible();
 });
 
 test("an over-long entity key shows a validation alert", async ({ page }) => {
   await page.goto(`/?entity=${"A".repeat(150)}`);
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Entity keys use letters, digits" })).toBeVisible();
 });
 
 test("narrow viewport has no horizontal scroll and the Evidence region is reachable", async ({ page }) => {
