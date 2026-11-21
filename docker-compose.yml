@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
+services:
+  db:
+    image: postgres:16
+    environment:
+      # Dev-only credentials for a throwaway local database. Never reuse them anywhere real.
+      POSTGRES_USER: tracer
+      POSTGRES_PASSWORD: tracer
+      POSTGRES_DB: tracer
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U tracer -d tracer"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
