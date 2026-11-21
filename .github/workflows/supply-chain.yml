@@ -22,30 +22,49 @@ jobs:
           persist-credentials: false
       - run: python3 scripts/check_spdx.py .
 
+  scripts-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.11.32"
+          enable-cache: false
+      - run: uv run --no-project --with pytest==9.2.0 python -m pytest scripts/tests -q -p no:cacheprovider
+
   licenses-backend:
-    if: hashFiles('backend/uv.lock') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Guards key on the manifest, not the lockfile: if backend/ exists but its lockfile
+      # was deleted, `uv sync --locked` fails the job instead of silently skipping the gate.
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        if: hashFiles('backend/pyproject.toml') != ''
+        with:
+          version: "0.11.32"
+          enable-cache: false
       - name: Runtime dependencies
+        if: hashFiles('backend/pyproject.toml') != ''
         working-directory: backend
         run: |
-          uv sync --locked --no-dev --no-install-project
-          uvx pip-licenses --python .venv/bin/python --format=json --output-file "$RUNNER_TEMP/pip-runtime.json"
+          uv sync --locked --no-dev --all-extras --no-install-project
+          uvx pip-licenses@5.5.5 --python .venv/bin/python --with-system --format=json --output-file "$RUNNER_TEMP/pip-runtime.json"
           python3 ../scripts/license_gate.py --pip-json "$RUNNER_TEMP/pip-runtime.json"
       - name: All dependency groups (LGPL allowed, dev only)
+        if: hashFiles('backend/pyproject.toml') != ''
         working-directory: backend
         run: |
-          uv sync --locked --no-install-project
-          uvx pip-licenses --python .venv/bin/python --format=json --output-file "$RUNNER_TEMP/pip-all.json"
+          uv sync --locked --all-groups --all-extras --no-install-project
+          uvx pip-licenses@5.5.5 --python .venv/bin/python --with-system --format=json --output-file "$RUNNER_TEMP/pip-all.json"
           python3 ../scripts/license_gate.py --pip-json "$RUNNER_TEMP/pip-all.json" --dev
 
   licenses-frontend:
-    if: hashFiles('frontend/package-lock.json') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -53,16 +72,20 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: hashFiles('frontend/package.json') != ''
         with:
           node-version: 22
-      - working-directory: frontend
+      - if: hashFiles('frontend/package.json') != ''
+        working-directory: frontend
         run: npm ci --ignore-scripts
       - name: Runtime dependencies
+        if: hashFiles('frontend/package.json') != ''
         working-directory: frontend
         run: |
           npx --yes license-checker-rseidelsohn@5.0.1 --production --excludePrivatePackages --json > "$RUNNER_TEMP/npm-runtime.json"
           python3 ../scripts/license_gate.py --npm-json "$RUNNER_TEMP/npm-runtime.json"
       - name: All dependencies (LGPL allowed, dev only)
+        if: hashFiles('frontend/package.json') != ''
         working-directory: frontend
         run: |
           npx --yes license-checker-rseidelsohn@5.0.1 --excludePrivatePackages --json > "$RUNNER_TEMP/npm-all.json"
@@ -82,11 +105,11 @@ jobs:
           chmod +x "$RUNNER_TEMP/osv-scanner"
       - name: Scan lockfiles that exist
         run: |
+          # Key on the manifests: a deleted lockfile then fails the scan instead of skipping it.
           args=()
-          for f in backend/uv.lock frontend/package-lock.json; do
-            [ -f "$f" ] && args+=("-L" "$f")
-          done
-          if [ "${#args[@]}" -eq 0 ]; then echo "no lockfiles yet"; exit 0; fi
+          [ -f backend/pyproject.toml ] && args+=("-L" backend/uv.lock)
+          [ -f frontend/package.json ] && args+=("-L" frontend/package-lock.json)
+          if [ "${#args[@]}" -eq 0 ]; then echo "no manifests yet"; exit 0; fi
           "$RUNNER_TEMP/osv-scanner" scan source "${args[@]}"
 
   gitleaks:

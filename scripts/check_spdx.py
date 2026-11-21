@@ -8,7 +8,7 @@ Usage: check_spdx.py [ROOT]   (exit 1 and list files when any are missing)
 import sys
 from pathlib import Path
 
-EXTS = {".py", ".ts", ".tsx", ".js", ".mjs", ".sh", ".sql"}
+EXTS = {".py", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".jsx", ".mts", ".cts", ".css", ".sh", ".sql"}
 SKIP_DIRS = {"node_modules", ".venv", ".next", ".git"}
 LINES = (
     "SPDX-License-Identifier: Apache-2.0",

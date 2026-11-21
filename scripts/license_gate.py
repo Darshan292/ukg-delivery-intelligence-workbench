@@ -27,12 +27,12 @@ _RANK: dict[Verdict, int] = {"allow": 0, "dev_only": 1, "deny": 2}
 
 _DENY = re.compile(
     r"non-?commercial|\bnc\b|(?<![a-z])(a|l)?gpl|general public|affero|sspl|server side public"
-    r"|busl|\bbsl\b|business source|unknown|see license|proprietary|commercial"
+    r"|busl|\bbsl\b|business source|unknown|see license|proprietary|commercial|commons.?clause"
 )
 _DEV_ONLY = re.compile(r"\blgpl|lesser general public|library general public")
 _ALLOW = re.compile(
     r"^(mit([- ]0)?( license)?|bsd([- ].*)?|apache([- ].*)?|isc( license.*)?|psf([- ].*)?"
-    r"|python software foundation.*|python-2\.0.*|mpl([- ].*)?|mozilla public license.*"
+    r"|python software foundation.*|python-2\.0.*|mpl[- ]2\.0.*|mozilla public license 2\.0.*"
     r"|0bsd|unlicense|the unlicense.*|cc0-1\.0|zlib( license)?)$"
 )
 _TOKENS = re.compile(r"(\(|\)|\s+AND\s+|\s+OR\s+|\s+WITH\s+)")
@@ -42,10 +42,10 @@ def _atom(text: str) -> Verdict:
     t = text.strip().rstrip("*").strip().lower()
     if not t:
         return "deny"
+    if _DENY.search(_DEV_ONLY.sub(" ", t)):  # judge GPL/AGPL even beside LGPL
+        return "deny"
     if _DEV_ONLY.search(t):
         return "dev_only"
-    if _DENY.search(t):
-        return "deny"
     return "allow" if _ALLOW.match(t) else "deny"
 
 
@@ -90,7 +90,8 @@ class _Parser:
             self.take()
             if self.peek() is None:
                 raise ValueError("malformed")
-            self.take()  # the exception is not judged
+            if _DENY.search(_DEV_ONLY.sub(" ", self.take().lower())):  # e.g. Commons-Clause
+                v = "deny"
         return v
 
 
@@ -152,6 +153,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dev", action="store_true", help="allow dev-only (LGPL) licences")
     a = ap.parse_args(argv)
     pkgs = load_pip(a.pip_json) if a.pip_json else load_npm(a.npm_json)
+    if not pkgs:
+        print("LICENCE GATE: no packages in input; failing closed")
+        return 1
     bad = check(pkgs, a.dev)
     for line in bad:
         print(f"LICENCE VIOLATION: {line}")

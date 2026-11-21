@@ -78,3 +78,10 @@ def test_cli_exit_code(tmp_path: Path) -> None:
     assert "a.py" in r.stdout
     put(tmp_path, "a.py", HEADER)
     assert subprocess.run(cmd, capture_output=True, text=True).returncode == 0
+
+
+def test_css_and_other_script_extensions_are_checked(tmp_path: Path) -> None:
+    names = {"a.css", "b.cjs", "c.jsx", "d.mts", "e.cts"}
+    for name in names:
+        (tmp_path / name).write_text("body {}\n")
+    assert {p.name for p in check_spdx.missing_headers(tmp_path)} == names

@@ -145,3 +145,24 @@ def test_cli_npm(tmp_path: Path) -> None:
 def test_wrapped_single_licence() -> None:
     assert lg.classify("(MIT)") == "allow"
     assert lg.classify("(GPL-3.0-only)") == "deny"
+
+
+@pytest.mark.parametrize("text", ["LGPL-2.1 and GPL-3.0", "GPL-3.0 / LGPL-2.1", "LGPLv3, AGPLv3"])
+def test_gpl_beside_lgpl_denied_even_dev(text: str) -> None:
+    assert lg.check([pkg(text)], dev=True)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Apache-2.0 WITH Commons-Clause", "Apache License 2.0 with Commons Clause", "MPL-1.1"],
+)
+def test_restricted_variants_denied(text: str) -> None:
+    assert lg.classify(text) == "deny"
+
+
+def test_cli_empty_input_fails_closed(tmp_path: Path) -> None:
+    f = tmp_path / "empty.json"
+    f.write_text("[]")
+    assert run_cli("--pip-json", str(f)).returncode == 1
+    f.write_text("{}")
+    assert run_cli("--npm-json", str(f)).returncode == 1
