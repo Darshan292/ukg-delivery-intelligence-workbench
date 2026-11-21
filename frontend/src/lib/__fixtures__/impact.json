@@ -1,0 +1,18 @@
+{
+  "entity": "RULE-T1",
+  "fictional": true,
+  "notice": "Tracer bullet: shows stored links around the entity. This is not impact analysis.",
+  "nodes": [
+    {"id": "REQ-T1", "label": "Fictional requirement", "entity_type": "requirement", "role": "linked"},
+    {"id": "RULE-T1", "label": "Fictional rule", "entity_type": "rule", "role": "seed"},
+    {"id": "TEST-T1", "label": "Fictional test", "entity_type": "test", "role": "linked"}
+  ],
+  "edges": [
+    {"id": "RULE-T1|implements|REQ-T1", "source": "RULE-T1", "target": "REQ-T1", "type": "implements",
+     "locator": {"kind": "xlsx_cell", "locator": {"file": "tracer-fixture.xlsx", "sheet": "Links", "cell": "B2"},
+                 "snippet": "RULE-T1 implements REQ-T1 (FICTIONAL, fake locator)"}},
+    {"id": "TEST-T1|verifies|RULE-T1", "source": "TEST-T1", "target": "RULE-T1", "type": "verifies",
+     "locator": {"kind": "xlsx_cell", "locator": {"file": "tracer-fixture.xlsx", "sheet": "Links", "cell": "B3"},
+                 "snippet": "TEST-T1 verifies RULE-T1 (FICTIONAL, fake locator)"}}
+  ]
+}

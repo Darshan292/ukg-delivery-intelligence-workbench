@@ -1,0 +1,9 @@
+# Changes to the gates themselves need the owner's review, because a pull request
+# from a fork runs its own copy of workflows, scripts and scanner allow-lists.
+/.github/ @Darshan292
+/scripts/ @Darshan292
+/.gitleaks.toml @Darshan292
+/.gitleaksignore @Darshan292
+/backend/uv.lock @Darshan292
+/frontend/package-lock.json @Darshan292
+/licence-exceptions.toml @Darshan292
