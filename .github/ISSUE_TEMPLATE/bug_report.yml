@@ -1,0 +1,23 @@
+name: Bug report
+description: Report something that does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include steps to reproduce, expected and actual behaviour. Use synthetic data only.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, browser, commit or version.
+  - type: checkboxes
+    id: no-real-data
+    attributes:
+      label: Data check
+      options:
+        - label: I confirm this report contains no real UKG exports, employee data, payroll data or client documents
+          required: true
