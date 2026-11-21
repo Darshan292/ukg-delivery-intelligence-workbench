@@ -8,7 +8,7 @@
 ## Purpose and rules of use
 
 - This is the **single human-readable spec** shared by the (future) fixture generator (slice 2b) and the hand-authored oracle (slice 2a, decision D10).
-- It states **inputs only**: fixtures, catalogue declarations, review events. It deliberately states **no expected impact results**. The oracle author derives them by hand from this file plus `docs/architecture/relationship-model.md` rev 2 and `docs/architecture/impact-propagation.md` rev 2.
+- It states **inputs only**: fixtures, catalogue declarations, review events. It deliberately states **no expected impact results**. The oracle author derives them by hand from this file plus `docs/architecture/relationship-model.md` rev 2.1 and `docs/architecture/impact-propagation.md` rev 2.1.
 - The generator must implement this file and must never read the oracle.
 - The worked example in `docs/architecture/impact-propagation-worked-example.md` covers a subset of this scenario. **Do not read it before the oracle is frozen.** This scenario adds objects that are not in it, so the worked example's table is not the oracle.
 
