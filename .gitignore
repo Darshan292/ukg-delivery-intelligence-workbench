@@ -8,3 +8,16 @@ graphify-out/
 .env
 .env.*
 !.env.example
+
+# Python / tooling caches
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.local/
+
+# Frontend
+frontend/node_modules/
+frontend/test-results/
+frontend/playwright-report/
