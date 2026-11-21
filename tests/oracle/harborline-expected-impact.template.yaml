@@ -4,21 +4,22 @@
 #
 # How to fill this in
 # - Derive every entry by hand from harborline-scenario.md, applying:
-#     R  = docs/architecture/relationship-model.md rev 2
+#     D2 = docs/decisions/0002-oracle-rule-clarifications.md (traversal passes, paths, removed links, sort)
+#     R  = docs/architecture/relationship-model.md rev 2.1
 #          ("Derived-state rules", "Edge tier", sections f, g, h, builder-check resolutions)
-#     P  = docs/architecture/impact-propagation.md rev 2
+#     P  = docs/architecture/impact-propagation.md rev 2.1
 #          ("Output kinds", "Propagation and deletion rules" table, "Edge-change seeds",
 #           "Coverage gaps", "Attribute sensitivity", builder-check resolutions 45, 4/8/11,
 #           3, 33, 34, 21/22, 35, 36/37, 38, 40, "Tiering, conflicts and same_as",
 #           "Traversal algorithm")
-# - Do not read the generator or its code. Do not copy from the worked example in P;
-#   the scenario has objects the worked example lacks.
+# - Do not read the generator or its code. Do not open the worked example
+#   (docs/architecture/impact-propagation-worked-example.md) before the oracle is frozen.
 # - Edge strings use the stored direction: "A -type-> B", with the attribute for
 #   asserts_value as "A -asserts_value[attr]-> B". Use entity keys exactly as in the scenario.
 # - Tier values: established | possible. Basis values: explicit_source | deterministic_rule.
 # - One entry per (kind, node) (P 36/37). Seeds go in change_set only, never in
 #   impact_candidates. List the shortest path first, then at most 3 alternatives (P 35);
-#   put the count of further paths in extra_paths_count.
+#   put the count of further paths in extra_paths_count (the string "1000+" above 1000; P step 4).
 # - Never write "safe". Never state pay amounts.
 #
 # Every block marked "# EXAMPLE - delete before submitting" uses an invented toy object
@@ -31,12 +32,12 @@ metadata:
   scenario_version: 1
   scenario_sha256: ""        # sha256sum of the exact scenario file you reasoned from
   rules_version:
-    relationship_model: "relationship-model.md rev 2"
-    impact_propagation: "impact-propagation.md rev 2"
+    relationship_model: "relationship-model.md rev 2.1"
+    impact_propagation: "impact-propagation.md rev 2.1 (decision 0002)"
   profile: synthetic
   depth_limit: 6
   open_question_calls: []    # any open question you had to settle to write an entry,
-                             # e.g. "R open question 3: accepted conflicted edge stays established"
+                             # e.g. "P open question 4: verifies fires for candidates as well as seeds"
   fixture_decisions_confirmed: []   # scenario section 7 item numbers you accept; veto others here
 
 # Seeds from the snapshot diff (P "Traversal algorithm" step 1). Never typed from intent:
