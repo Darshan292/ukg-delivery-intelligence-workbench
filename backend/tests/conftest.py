@@ -9,7 +9,6 @@ Set REQUIRE_DB_TESTS=1 (CI) so that a missing Postgres fails instead of skipping
 """
 
 import os
-import shutil
 import uuid
 from collections.abc import Iterator
 
@@ -21,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.main import create_app
+from tests.pg_locate import find_pg_ctl
 
 
 def _no_db(reason: str) -> None:
@@ -33,8 +33,11 @@ def _admin_url(request: pytest.FixtureRequest) -> URL:
     env = os.environ.get("TEST_DATABASE_URL")
     if env:
         return make_url(env)
-    if shutil.which("pg_ctl") is None and not os.path.exists("/usr/lib/postgresql/16/bin/pg_ctl"):
+    pg_ctl = find_pg_ctl()
+    if pg_ctl is None:
         _no_db("pg_ctl not found: install PostgreSQL or set TEST_DATABASE_URL")
+    else:
+        request.config.option.postgresql_exec = pg_ctl  # the plugin's default path rarely exists
     proc = request.getfixturevalue("postgresql_proc")
     return URL.create(
         "postgresql+pg8000",
@@ -76,3 +79,37 @@ def client(db_engine: Engine) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_session] = _session
     yield TestClient(app)
+
+
+@pytest.fixture
+def graph_engine(db_engine: Engine, db_url: URL) -> Engine:
+    """Migrated database with empty tracer tables."""
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    root = Path(__file__).resolve().parent.parent
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "migrations"))
+    cfg.attributes["url"] = db_url.render_as_string(hide_password=False)
+    command.upgrade(cfg, "head")
+    with db_engine.begin() as c:
+        c.execute(text("TRUNCATE evidence_locator, relationship, entity RESTART IDENTITY CASCADE"))
+    return db_engine
+
+
+@pytest.fixture
+def graph_client(graph_engine: Engine) -> Iterator[TestClient]:
+    from app.seed import seed_tracer_graph
+
+    with Session(graph_engine) as s:
+        seed_tracer_graph(s)
+    app = create_app()
+
+    def _session() -> Iterator[Session]:
+        with Session(graph_engine) as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _session
+    yield TestClient(app, raise_server_exceptions=False)
