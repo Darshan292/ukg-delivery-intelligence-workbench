@@ -36,7 +36,7 @@ Synthetic data exists to exercise the pipeline, not to describe UKG. Its object 
 
 ## No invented compatibility
 
-We have **no live UKG tenant access** and no customer artefacts. We **may** use documented vendor sources that are cited in the repository: the verified research notes under `research_notes/` (for example `verified_ukg_technical.md` and `verified_ukg_developer_policy.md`) and the public UKG pages they quote, with URL and retrieval date. So:
+We have **no live UKG tenant access** and no customer artefacts. We **may** use documented vendor sources that are cited in the repository: the verified research notes under `docs/research/notes/` (for example `verified_ukg_technical.md` and `verified_ukg_developer_policy.md`) and the public UKG pages they quote, with URL and retrieval date. So:
 
 - Do not write code against UKG API endpoints, payloads, auth flows or export layouts unless a cited source in this repo (a verified research note, a sample export, a spec the user provided) shows them. Cite it, and label the claim as documented vendor fact, distinct from inference.
 - A documented source tells you what UKG publishes, not how a particular customer configured it. Never infer a customer's configuration from vendor documentation.

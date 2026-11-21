@@ -1,7 +1,7 @@
 # Practitioner Interview Guide
 
 Status: draft for user approval. Thresholds in section 9 are proposed, not agreed.
-Source: `reports/UKG delivery intelligence research.md` (sections 2, 12, 13, "Direct answers").
+Source: `docs/research/research-report.md` (sections 2, 12, 13, "Direct answers").
 
 ## 1. Purpose
 
@@ -218,7 +218,7 @@ An unfavourable result is a valid result. Do not recruit additional interviewees
 - Do not ask interviewees to breach their customer agreements or employer policy. Do not ask for UKG-confidential material.
 - Interviewees are not asked to share files. Any later artefact sharing is a separate step after the interview and goes through an approval gate.
 - Milestone 1 is synthetic data only. No real artefact enters the repository or any tool.
-- A future real-artefact gate requires all of: the customer's written consent; sanitisation agreed and checked; the sharer's employer approval where relevant; and legal clarification of the UKG Developer Policy and the customer MSA. Open policy questions are in `research_notes/UKG delivery intelligence research/verified_ukg_developer_policy.md`. They include whether configuration exports are Customer Data, how "Developer" and "Competitive Product or Service" apply, the cross-tenant aggregation clause, and the ban on using Customer Data to evaluate AI models without written consent. That note is not legal advice and does not settle the offline-file case.
+- A future real-artefact gate requires all of: the customer's written consent; sanitisation agreed and checked; the sharer's employer approval where relevant; and legal clarification of the UKG Developer Policy and the customer MSA. Open policy questions are in `docs/research/notes/verified_ukg_developer_policy.md`. They include whether configuration exports are Customer Data, how "Developer" and "Competitive Product or Service" apply, the cross-tenant aggregation clause, and the ban on using Customer Data to evaluate AI models without written consent. That note is not legal advice and does not settle the offline-file case.
 - Store interview material separately from the code repository. Keep identifying details out of synthesis documents.
 - Do not use Workday, Boomi, ServiceNow or UKG tenant access to prepare for or follow up on interviews.
 

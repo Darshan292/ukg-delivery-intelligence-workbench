@@ -1,6 +1,6 @@
 # Risk and assumptions register
 
-Updated 2026-11-18 after the UKG Developer Policy review. Sources: `reports/UKG delivery intelligence research.md` and `research_notes/UKG delivery intelligence research/verified_ukg_developer_policy.md`. Status labels: **Verified** (primary source read), **Partly verified**, **Unverified**, **Assumption** (a deliberate modelling choice).
+Updated 2026-11-18 after the UKG Developer Policy review. Sources: `docs/research/research-report.md` and `docs/research/notes/verified_ukg_developer_policy.md`. Status labels: **Verified** (primary source read), **Partly verified**, **Unverified**, **Assumption** (a deliberate modelling choice).
 
 ## A. Legal, policy and commercial access
 

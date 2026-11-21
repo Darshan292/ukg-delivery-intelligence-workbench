@@ -19,7 +19,7 @@ An open-source tool for UKG implementation, migration and support practitioners 
 | [`docs/architecture/impact-propagation.md`](docs/architecture/impact-propagation.md) | Directional change-impact rules |
 | [`docs/decisions-for-approval.md`](docs/decisions-for-approval.md) | Decisions made and still open |
 | [`docs/risk-register.md`](docs/risk-register.md) | Risks and assumptions, including UKG Developer Policy constraints |
-| [`reports/UKG delivery intelligence research.md`](reports/UKG%20delivery%20intelligence%20research.md) | The research behind the design |
+| [`docs/research/research-report.md`](docs/research/research-report.md) | The research behind the design |
 
 ## Boundaries
 
