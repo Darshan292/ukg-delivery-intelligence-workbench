@@ -6,3 +6,4 @@
 /.gitleaksignore @Darshan292
 /backend/uv.lock @Darshan292
 /frontend/package-lock.json @Darshan292
+/licence-exceptions.toml @Darshan292
