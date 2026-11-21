@@ -1,7 +1,7 @@
 [project]
-name = "ukg-workbench-backend"
+name = "workbench-backend"
 version = "0.0.0"
-description = "UKG Delivery Intelligence Workbench backend (tracer scaffold)"
+description = "Evidence-first impact workbench backend (tracer scaffold)"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = [

@@ -5,11 +5,13 @@
 Only entity, relationship and evidence_locator exist. Documents, versions, claims, review
 events and snapshots (docs/architecture/relationship-model.md) arrive in Slice 1, as do
 the final ID scheme and locator ownership. Rows here are fictional fixtures, not claims.
+Rows are disposable fixtures; Slice 1 drops these tables and re-ingests, it never migrates them
+(provenance cannot be invented).
 """
 
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Identity, Text, UniqueConstraint
+from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Identity, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -28,7 +30,7 @@ class Entity(Base):
         ),
     )
 
-    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     product_profile: Mapped[str] = mapped_column(Text)
     entity_type: Mapped[str] = mapped_column(Text)
     natural_key: Mapped[str] = mapped_column(Text)
@@ -42,17 +44,17 @@ class Relationship(Base):
         CheckConstraint("source_entity_id <> target_entity_id", name="ck_relationship_no_self"),
     )
 
-    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     type: Mapped[str] = mapped_column(Text)
-    source_entity_id: Mapped[int] = mapped_column(ForeignKey("entity.id"))
-    target_entity_id: Mapped[int] = mapped_column(ForeignKey("entity.id"))
+    source_entity_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("entity.id"))
+    target_entity_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("entity.id"))
 
 
 class EvidenceLocator(Base):
     __tablename__ = "evidence_locator"
 
-    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
-    relationship_id: Mapped[int] = mapped_column(ForeignKey("relationship.id"))
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    relationship_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("relationship.id"))
     kind: Mapped[str] = mapped_column(Text)
     locator: Mapped[dict[str, Any]] = mapped_column(JSONB)
     snippet: Mapped[str] = mapped_column(Text)

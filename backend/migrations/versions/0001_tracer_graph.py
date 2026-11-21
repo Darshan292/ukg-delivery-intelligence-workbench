@@ -19,7 +19,7 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "entity",
-        sa.Column("id", sa.Integer, sa.Identity(), primary_key=True),
+        sa.Column("id", sa.BigInteger, sa.Identity(), primary_key=True),
         sa.Column("product_profile", sa.Text, nullable=False),
         sa.Column("entity_type", sa.Text, nullable=False),
         sa.Column("natural_key", sa.Text, nullable=False),
@@ -32,17 +32,19 @@ def upgrade() -> None:
     )
     op.create_table(
         "relationship",
-        sa.Column("id", sa.Integer, sa.Identity(), primary_key=True),
+        sa.Column("id", sa.BigInteger, sa.Identity(), primary_key=True),
         sa.Column("type", sa.Text, nullable=False),
-        sa.Column("source_entity_id", sa.Integer, sa.ForeignKey("entity.id"), nullable=False),
-        sa.Column("target_entity_id", sa.Integer, sa.ForeignKey("entity.id"), nullable=False),
+        sa.Column("source_entity_id", sa.BigInteger, sa.ForeignKey("entity.id"), nullable=False),
+        sa.Column("target_entity_id", sa.BigInteger, sa.ForeignKey("entity.id"), nullable=False),
         sa.UniqueConstraint("type", "source_entity_id", "target_entity_id"),
         sa.CheckConstraint("source_entity_id <> target_entity_id", name="ck_relationship_no_self"),
     )
     op.create_table(
         "evidence_locator",
-        sa.Column("id", sa.Integer, sa.Identity(), primary_key=True),
-        sa.Column("relationship_id", sa.Integer, sa.ForeignKey("relationship.id"), nullable=False),
+        sa.Column("id", sa.BigInteger, sa.Identity(), primary_key=True),
+        sa.Column(
+            "relationship_id", sa.BigInteger, sa.ForeignKey("relationship.id"), nullable=False
+        ),
         sa.Column("kind", sa.Text, nullable=False),
         sa.Column("locator", JSONB, nullable=False),
         sa.Column("snippet", sa.Text, nullable=False),

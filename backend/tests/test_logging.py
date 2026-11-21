@@ -16,7 +16,9 @@ def _record(msg: str) -> logging.LogRecord:
 
 @given(st.text())
 def test_json_formatter_valid_json(msg: str) -> None:
-    out = json.loads(JsonFormatter().format(_record(msg)))
+    raw = JsonFormatter().format(_record(msg))
+    assert "\n" not in raw
+    out = json.loads(raw)
     assert out["message"] == msg
     assert out["level"] == "INFO"
     assert {"ts", "logger"} <= out.keys()

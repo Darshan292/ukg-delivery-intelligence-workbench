@@ -16,7 +16,6 @@ defaults:
 
 jobs:
   lint-type:
-    if: hashFiles('backend/uv.lock') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,13 +23,16 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.11.32"
+          enable-cache: false
+          python-version: "3.13"
       - run: uv sync --locked
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run pyright
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen pyright
 
   test:
-    if: hashFiles('backend/uv.lock') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -40,12 +42,15 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.11.32"
+          enable-cache: false
+          python-version: "3.13"
       - run: uv sync --locked
       # pytest-postgresql starts its own server from the runner's PostgreSQL binaries.
-      - run: uv run pytest
+      - run: uv run --frozen pytest
 
   compose:
-    if: hashFiles('backend/uv.lock') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -55,11 +60,15 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.11.32"
+          enable-cache: false
+          python-version: "3.13"
       - run: uv sync --locked --no-dev
       - run: docker compose up -d --wait db
         working-directory: .
-      - run: uv run --no-dev alembic upgrade head
-      - run: uv run --no-dev alembic upgrade head # idempotent
+      - run: uv run --frozen --no-dev alembic upgrade head
+      - run: uv run --frozen --no-dev alembic upgrade head # idempotent
       - name: Assert tables exist
         working-directory: .
         run: |

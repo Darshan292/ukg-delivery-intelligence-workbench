@@ -3,6 +3,8 @@
 """FastAPI application factory."""
 
 import logging
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
@@ -10,16 +12,25 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import get_session
+from app.logging_config import configure_logging
 
 log = logging.getLogger(__name__)
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+    # Fails fast at startup when DATABASE_URL is missing.
+    configure_logging(get_settings().log_level)
+    yield
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="UKG Delivery Intelligence Workbench (tracer)")
+    app = FastAPI(title="Evidence-first impact workbench (tracer)", lifespan=lifespan)
 
     @app.get("/health")
-    def health() -> dict[str, str]:  # liveness: never touches the DB
+    async def health() -> dict[str, str]:  # liveness: async so it never waits on the threadpool
         return {"status": "ok"}
 
     @app.get("/health/ready", response_model=None)

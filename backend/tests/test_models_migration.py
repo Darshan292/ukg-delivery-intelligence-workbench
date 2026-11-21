@@ -5,13 +5,15 @@ from pathlib import Path
 
 import pytest
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import Engine, inspect
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Entity, Relationship
+from app.models import Base, Entity, Relationship
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -59,3 +61,27 @@ def test_relationship_rejects_self_link(migrated: Engine) -> None:
         s.add(Relationship(type="implements", source_entity_id=e.id, target_entity_id=e.id))
         with pytest.raises(DBAPIError, match="ck_relationship_no_self"):
             s.flush()
+
+
+def test_models_match_migration(migrated: Engine) -> None:
+    with migrated.connect() as conn:
+        ctx = MigrationContext.configure(conn)
+        assert compare_metadata(ctx, Base.metadata) == []
+
+
+@pytest.mark.parametrize("profile", ["synthetic", "ukg_pro_wfm", "workforce_central", "unknown"])
+def test_entity_accepts_approved_profiles(migrated: Engine, profile: str) -> None:
+    with Session(migrated) as s:
+        _entity(s, f"K-{profile}", profile=profile)
+        s.rollback()
+
+
+def test_duplicate_relationship_rejected(migrated: Engine) -> None:
+    with Session(migrated) as s:
+        a, b = _entity(s, "D-A"), _entity(s, "D-B")
+        s.add(Relationship(type="implements", source_entity_id=a.id, target_entity_id=b.id))
+        s.flush()
+        s.add(Relationship(type="implements", source_entity_id=a.id, target_entity_id=b.id))
+        with pytest.raises(IntegrityError):
+            s.flush()
+        s.rollback()
