@@ -1,5 +1,6 @@
 # Licence exceptions read by scripts/license_gate.py.
 # Each entry: exact package name, version range, exact licence string, reason, approver, date.
+# approved_by is a record, not a control: CODEOWNERS review of this file is.
 # No wildcards. Any new entry needs the owner's approval (licence matter): escalate, never add one yourself.
 
 [[exception]]
