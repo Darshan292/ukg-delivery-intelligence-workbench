@@ -1,6 +1,11 @@
 # Proposed canonical relationship model
 
-Status: **rev 2, approved 2026-11-20 (D3); not yet implemented.** Items marked *Recommendation* are proposals for you to choose, not decisions.
+Status: **rev 2.1 (2026-11-20), see decision 0002** (`docs/decisions/0002-oracle-rule-clarifications.md`). Rev 2 approved 2026-11-20 (D3); not yet implemented. Items marked *Recommendation* are proposals for you to choose, not decisions.
+
+## Changes in rev 2.1 (decision 0002)
+
+- An accepted conflicted edge stays *established* and is flagged (this closes the third open question below).
+- "Explicit basis" in the edge tier is defined: the strongest live present claim is `explicit_source`.
 
 ## Changes from rev 1
 
@@ -74,7 +79,7 @@ Entity types are catalogued as **snapshot-scoped** (configuration objects, mappi
 
 *Recommendation:* **D2.**
 - A claim's `scope_snapshot_id` is the snapshot of its locators' document versions. The constraint is at most one distinct snapshot per claim; null means unscoped.
-- For a scoped relationship evaluated in snapshot S, the live claims are those scoped to S, plus unscoped claims.
+- Every analysis runs in a snapshot context S. For **any** relationship, scoped or not, the live claims in S are its unscoped claims plus the claims scoped to S (`docs/decisions/0001-snapshot-scoped-claims.md`, approved 2026-11-20).
 - A verdict on a scoped relationship must name S. Verdicts on unscoped relationships have no scope.
 
 **Carry-forward.** Options:
@@ -107,7 +112,7 @@ Entity types are catalogued as **snapshot-scoped** (configuration objects, mappi
 
 *Recommendation:* **F1.** A conflict clears only when the evidence state changes: a claim is rejected or superseded, or a relationship is rejected. Accepting one side does not clear the conflict while the other side remains live and unreviewed.
 
-**Surfacing.** Conflicts are shown on both edges, in the review queue, and on every impact path that uses a conflicted edge. **Effect on tiering:** an unreviewed conflicted edge is *possible*, never excluded, and both competing edges are traversed. For an **accepted** conflicted edge, the *recommendation* is that it stays *established* and is flagged. This is open question 3, not settled.
+**Surfacing.** Conflicts are shown on both edges, in the review queue, and on every impact path that uses a conflicted edge. **Effect on tiering:** an unreviewed conflicted edge is *possible*, never excluded, and both competing edges are traversed. An **accepted** conflicted edge stays *established* and is flagged (decision 0002, item 1).
 
 ## g. Entity identity and `same_as`
 
@@ -181,9 +186,9 @@ ReviewEvent(id, target_kind{claim,relationship}, claim_id NULL, relationship_id 
 
 ## Derived-state rules
 
-For relationship R in scope S (S is ignored when R is unscoped):
+For relationship R in snapshot context S (S selects which scoped claims are live, for scoped and unscoped relationships alike; only verdicts on unscoped relationships ignore S):
 
-1. **Live claims** = claims of R that are in scope (scoped to S, or unscoped), not superseded, and whose latest claim event is not `rejected`.
+1. **Live claims** = claims of R that are unscoped or scoped to S, not superseded, and whose latest claim event is not `rejected`.
 2. **Verdict V** = the latest relationship event for (R, S), ordered by `at` then `id`.
 3. **Effective state:**
    - If V = rejected → `rejected`.
@@ -203,7 +208,7 @@ For relationship R in scope S (S is ignored when R is unscoped):
 Badges: `CONFLICT`, `SUPPORT LOST`, `accepted in <snapshot>` (a hint only).
 
 **Edge tier** (consumed by impact analysis):
-- **Established:** the edge is accepted, or it is unreviewed with an explicit basis, has no conflict and is not `same_as`.
+- **Established:** the edge is accepted, or it is unreviewed with an **explicit basis** (the strongest live present claim is `explicit_source`), has no conflict and is not `same_as`.
 - **Possible:** any other unreviewed edge.
 - **Excluded:** rejected, superseded or unsupported.
 
@@ -236,7 +241,7 @@ Badges: `CONFLICT`, `SUPPORT LOST`, `accepted in <snapshot>` (a hint only).
 
 1. **Engineer assertion** (basis `engineer_assertion`, with a written justification as evidence). Recommended: allow it, *possible* until a second human accepts it.
 2. **Single reviewer** for Milestone 1. Recommended: yes, recorded. Revisit two-person review for payroll-affecting types with practitioners.
-3. **Accepted conflicted edges** stay *established* (recommended) or drop to *possible* until the conflict clears.
+3. *Closed by decision 0002, item 1:* an accepted conflicted edge stays *established* and is flagged.
 4. **Bulk re-accept** across snapshots (recommended (iii) in d), or require edge-by-edge re-review.
 5. Whether the Milestone 1 fixtures include explicit **`absent`** statements, so that polarity conflicts are exercised by the oracle (recommended: one mutation, not the base scenario).
 6. Natural keys for real Pro WFM and WFC entities across environments. This needs evidence and is deferred until a real profile is in scope (after G-REAL).

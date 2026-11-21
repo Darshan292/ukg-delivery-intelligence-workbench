@@ -1,0 +1,201 @@
+# FICTIONAL. NOT UKG BEHAVIOUR. Profile: synthetic.
+# Hand-authored oracle for the Harborline scenario (Milestone 1, slice 2a, decision D10).
+# Target path once frozen: tests/oracle/harborline-expected-impact.yaml
+#
+# How to fill this in
+# - Derive every entry by hand from harborline-scenario.md, applying:
+#     D2 = docs/decisions/0002-oracle-rule-clarifications.md (traversal passes, paths, removed links, sort)
+#     R  = docs/architecture/relationship-model.md rev 2.1
+#          ("Derived-state rules", "Edge tier", sections f, g, h, builder-check resolutions)
+#     P  = docs/architecture/impact-propagation.md rev 2.1
+#          ("Output kinds", "Propagation and deletion rules" table, "Edge-change seeds",
+#           "Coverage gaps", "Attribute sensitivity", builder-check resolutions 45, 4/8/11,
+#           3, 33, 34, 21/22, 35, 36/37, 38, 40, "Tiering, conflicts and same_as",
+#           "Traversal algorithm")
+# - Do not read the generator or its code. Do not open the worked example
+#   (docs/architecture/impact-propagation-worked-example.md) before the oracle is frozen.
+# - Edge strings use the stored direction: "A -type-> B", with the attribute for
+#   asserts_value as "A -asserts_value[attr]-> B". Use entity keys exactly as in the scenario.
+# - Tier values: established | possible. Basis values: explicit_source | deterministic_rule.
+# - One entry per (kind, node) (P 36/37). Seeds go in change_set only, never in
+#   impact_candidates. List the shortest path first, then at most 3 alternatives (P 35);
+#   put the count of further paths in extra_paths_count (the string "1000+" above 1000; P step 4).
+# - Never write "safe". Never state pay amounts.
+#
+# Every block marked "# EXAMPLE - delete before submitting" uses an invented toy object
+# (LAMP-*, from a toy lighthouse scenario that does not exist in Harborline). Delete them.
+
+metadata:
+  author: ""                 # your name (a human; not an agent)
+  date: ""                   # YYYY-MM-DD
+  scenario_file: harborline-scenario.md
+  scenario_version: 1
+  scenario_sha256: ""        # sha256sum of the exact scenario file you reasoned from
+  rules_version:
+    relationship_model: "relationship-model.md rev 2.1"
+    impact_propagation: "impact-propagation.md rev 2.1 (decision 0002)"
+  profile: synthetic
+  depth_limit: 6
+  open_question_calls: []    # any open question you had to settle to write an entry,
+                             # e.g. "P open question 4: verifies fires for candidates as well as seeds"
+  fixture_decisions_confirmed: []   # scenario section 7 item numbers you accept; veto others here
+
+# Seeds from the snapshot diff (P "Traversal algorithm" step 1). Never typed from intent:
+# write what a field-level diff of the two exports and edge presence would show.
+change_set:
+  attribute_changes: []
+  # EXAMPLE - delete before submitting
+  # - node: LAMP-TIMER
+  #   attribute: interval_seconds
+  #   before: "30"
+  #   after: "45"
+  #   semantic: true               # false if display-only in the catalogue (P "Attribute sensitivity")
+  #   attribute_conflict: false    # R section h; true caps the seed at possible
+  #   seed_tier: established
+  edge_changes: []
+  # EXAMPLE - delete before submitting
+  # - edge: "LAMP-TIMER -uses-> LAMP-CLOCK"
+  #   change: removed              # added | removed
+  #   holder_seed: LAMP-TIMER      # stored source (P "Edge-change seeds")
+  #   seed_tier: established       # tier of the edge that created the seed
+  entities_added: []
+  entities_removed: []
+  display_only_changes: []       # reported, never propagated
+
+# P "Output kinds": modelled objects whose behaviour or output may change.
+impact_candidates:
+  established: []
+  possible: []
+  # EXAMPLE - delete before submitting (shape is the same under established and possible)
+  # - node: LAMP-BEACON
+  #   node_type: beacon
+  #   paths:
+  #     - ["LAMP-BEACON -uses-> LAMP-TIMER"]                       # shortest first
+  #     - ["LAMP-SWITCH -contains-> LAMP-TIMER", "LAMP-BEACON -uses-> LAMP-SWITCH"]
+  #   extra_paths_count: 0
+  #   triggering_edge_basis: explicit_source   # basis of the final edge on the shortest path
+  #   weakest_edge:                            # weakest edge of the best path (P 4/8/11)
+  #     edge: "LAMP-BEACON -uses-> LAMP-TIMER"
+  #     tier: established
+  #     basis: explicit_source
+  #     method: null                           # for rule claims: method of the representative claim
+  #     confidence: null                       # decimal string, e.g. "0.8"
+  #   conflict: null                           # or {kind: polarity|cardinality|documentary_only|identity|attribute,
+  #                                            #     edges_or_claims: ["...", "..."]}
+  #   label: null                              # e.g. "affected population" for assigns
+
+# P "Output kinds" and rules table columns marked RV. Terminal; tiered by the triggering path.
+revalidation_tasks: []
+# EXAMPLE - delete before submitting
+# - node: LAMP-TEST-9
+#   node_type: test
+#   task: "update expected value"            # wording from the P rules table
+#   old_value: "30"                          # only for asserts_value
+#   new_value: "45"
+#   tier: possible
+#   paths:
+#     - ["LAMP-TEST-9 -asserts_value[interval_seconds]-> LAMP-TIMER"]
+#   triggering_edge_basis: deterministic_rule
+#   weakest_edge:
+#     edge: "LAMP-TEST-9 -asserts_value[interval_seconds]-> LAMP-TIMER"
+#     tier: possible
+#     basis: deterministic_rule
+#     method: "toy_match@1"
+#     confidence: "0.6"
+#   conflict: null
+
+# P "Coverage gaps": evaluated only for requirements with an RV task, integrations that are
+# seeds or candidates, and deletions.
+coverage_gaps: []
+# EXAMPLE - delete before submitting
+# - node: LAMP-REQ-3
+#   node_type: requirement
+#   gap: test_gap                  # test_gap | possible_coverage_only | implementation_gap
+#   reason: "zero live verifies edges that are not excluded"
+#   why_in_scope: "has a re-validation task"
+
+# P "Output kinds": one hop from seeds only; tier of the one edge (P 38).
+upstream_constraints: []
+# EXAMPLE - delete before submitting
+# - node: LAMP-CLOCK
+#   seed: LAMP-TIMER
+#   edge: "LAMP-TIMER -uses-> LAMP-CLOCK"
+#   tier: established
+#   basis: explicit_source
+
+# P "Output kinds": documents and past defects attached to seeds and candidates;
+# also documentation mismatches (R section h).
+context: []
+# EXAMPLE - delete before submitting
+# - node: LAMP-TIMER               # the seed or candidate the context is attached to
+#   kind: mention                  # mention | past_defect | documentation_mismatch | mentions_deleted_object
+#   item: LAMP-MANUAL-S2
+#   edge: "LAMP-MANUAL-S2 -mentions-> LAMP-TIMER"
+#   basis: deterministic_rule
+
+# P "Output kinds" and "Traversal algorithm" step 6; R builder-check 24/39 (UnresolvedReference).
+not_modelled:
+  global_caveats: []             # appear once in the report header (P 40), e.g. effective dating
+  entries: []
+  # EXAMPLE - delete before submitting
+  # - kind: external_target        # external_target | dangling_reference | uncatalogued_type |
+  #                                # unknown_profile | unparsed_document | depth_cutoff | untyped_edge
+  #   node: LAMP-SHIP-SIGNAL
+  #   via: "LAMP-ROW-1 -maps_to-> LAMP-SHIP-SIGNAL"
+  #   raw_reference: null          # for UnresolvedReference entries: the raw cell text
+  #   reason: "entity type flagged external; its system's behaviour is not modelled"
+
+# The report's final line when there are no impact candidates must be exactly
+# "No impact candidates found in the modelled graph" followed by the not-modelled list.
+no_candidates_statement: null    # true only if impact_candidates is empty
+
+# One stub per mutation in harborline-scenario.md section 8. State the expected effect as a
+# DIFFERENCE from the base oracle above. Leave a list empty when nothing changes in it.
+# EXAMPLE - delete before submitting
+# - id: LAMP-M01
+#   expected_effect: "LAMP-BEACON moves from established to possible; cardinality conflict named on both edges"
+#   change_set_delta: []
+#   entries_added: [{kind: coverage_gaps, node: LAMP-REQ-3}]
+#   entries_removed: []
+#   tier_changes: [{kind: impact_candidates, node: LAMP-BEACON, from: established, to: possible}]
+#   conflicts_added: [{kind: cardinality, edges: ["LAMP-BEACON -uses-> LAMP-TIMER", "LAMP-BEACON -uses-> LAMP-OLD"]}]
+#   not_modelled_added: []
+#   notes: ""
+mutations:
+  - {id: M01, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M02, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M03, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M04, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M05, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M06, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M07, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M08, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M09, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M10, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M11, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M12, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M13, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M14, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M15, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M16, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M17, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M18, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M19, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M20, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M21, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M22, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M23, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M24, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M25, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+  - {id: M26, expected_effect: "", change_set_delta: [], entries_added: [], entries_removed: [], tier_changes: [], conflicts_added: [], not_modelled_added: [], notes: ""}
+
+# Messy variants (scenario section 9): the boundaries or claims each must yield.
+messy_variants:
+  - {id: X1, expected_effect: "", boundaries: [], claims_changed: [], notes: ""}
+  - {id: X2, expected_effect: "", boundaries: [], claims_changed: [], notes: ""}
+  - {id: X3, expected_effect: "", boundaries: [], claims_changed: [], notes: ""}
+  - {id: X4, expected_effect: "", boundaries: [], claims_changed: [], notes: ""}
+  - {id: X5, expected_effect: "", boundaries: [], claims_changed: [], notes: ""}
+  - {id: X6, expected_effect: "", boundaries: [], claims_changed: [], notes: ""}
+  - {id: X7, expected_effect: "", boundaries: [], claims_changed: [], notes: ""}
+  - {id: X8, expected_effect: "", boundaries: [], claims_changed: [], notes: ""}

@@ -33,7 +33,7 @@ The change set is **derived by diffing the two snapshots**. It is never written 
 
 ## Validation design (no self-certification)
 
-- **Independent oracle.** `tests/oracle/harborline-expected-impact.yaml` is **authored by hand** from the fictional scenario description, **before** the generator and parser exist, by someone not writing the generator. It lists the expected change set, impact candidates by tier, upstream constraints, context, coverage gaps and not-modelled boundaries (see `docs/architecture/impact-propagation.md`, worked example). The generator must not read it, and it must not be generated from the generator's spec.
+- **Independent oracle.** `tests/oracle/harborline-expected-impact.yaml` is **authored by hand** from the fictional scenario description, **before** the generator and parser exist, by someone not writing the generator. It lists the expected change set, impact candidates by tier, upstream constraints, context, coverage gaps and not-modelled boundaries (see `docs/architecture/impact-propagation.md` "Output kinds"; the worked example in `docs/architecture/impact-propagation-worked-example.md` must not be read before the oracle is frozen). The generator must not read it, and it must not be generated from the generator's spec.
 - **Mutation tests.** At least 20 mutations of the fixtures or graph, each with a hand-stated expected effect. Examples:
   - delete a `uses` reference;
   - break an ID (dangling reference);
