@@ -45,4 +45,31 @@ describe("toFlow", () => {
     expect(xs).toEqual([...xs].sort((a, b) => a - b));
     expect(new Set(xs).size).toBe(3);
   });
+
+  describe("vertical", () => {
+    it("stacks nodes top to bottom in id order", () => {
+      const { nodes } = toFlow(resp, "vertical");
+      expect(nodes.map((n) => n.id)).toEqual(["REQ-T1", "RULE-T1", "TEST-T1"]);
+      expect(new Set(nodes.map((n) => n.position.x)).size).toBe(1);
+      const ys = nodes.map((n) => n.position.y);
+      expect(ys).toEqual([...ys].sort((a, b) => a - b));
+      expect(new Set(ys).size).toBe(3);
+    });
+
+    it("keeps stored direction with top and bottom handles", () => {
+      const { edges } = toFlow(resp, "vertical");
+      // RULE-T1 -> REQ-T1 points up; TEST-T1 -> RULE-T1 points up.
+      expect(edges[0]).toMatchObject({ sourceHandle: "out-t", targetHandle: "in-b" });
+      const down: ImpactResponse = {
+        ...resp,
+        edges: [{ ...resp.edges[0], id: "a", source: "REQ-T1", target: "RULE-T1" }],
+      };
+      expect(toFlow(down, "vertical").edges[0]).toMatchObject({ sourceHandle: "out-b", targetHandle: "in-t" });
+    });
+
+    it("is deterministic for shuffled input", () => {
+      const shuffled: ImpactResponse = { ...resp, nodes: [...resp.nodes].reverse(), edges: [...resp.edges].reverse() };
+      expect(toFlow(shuffled, "vertical")).toEqual(toFlow(resp, "vertical"));
+    });
+  });
 });
