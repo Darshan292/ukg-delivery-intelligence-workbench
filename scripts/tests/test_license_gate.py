@@ -166,3 +166,90 @@ def test_cli_empty_input_fails_closed(tmp_path: Path) -> None:
     assert run_cli("--pip-json", str(f)).returncode == 1
     f.write_text("{}")
     assert run_cli("--npm-json", str(f)).returncode == 1
+
+
+# --- licence exceptions (owner-approved, exact name + version range + licence) ---
+
+EXC = """
+[[exception]]
+name = "@img/sharp-libvips-linux-x64"
+versions = ">=1.3.4,<1.4.0"
+licence = "LGPL-3.0-or-later"
+reason = "optional native library"
+approved_by = "owner"
+date = 2026-11-21
+"""
+
+
+def exc(tmp_path: Path, text: str = EXC) -> list[lg.LicenceException]:
+    f = tmp_path / "exc.toml"
+    f.write_text(text)
+    return lg.load_exceptions(f)
+
+
+def lib(name: str = "@img/sharp-libvips-linux-x64", version: str = "1.3.4", lic: str = "LGPL-3.0-or-later") -> dict[str, str]:
+    return {"name": name, "version": version, "license": lic}
+
+
+def test_exception_allows_exact_match_at_runtime(tmp_path: Path) -> None:
+    e = exc(tmp_path)
+    assert lg.check([lib()], dev=False)  # still a violation without the exception
+    assert lg.check([lib(), lib(version="1.3.9")], dev=False, exceptions=e) == []
+
+
+@pytest.mark.parametrize(
+    "p",
+    [
+        lib(name="@img/sharp-libvips-linux-x64-evil"),
+        lib(name="@img/sharp-libvips-linux"),
+        lib(version="1.4.0"),
+        lib(version="1.3.3"),
+        lib(version="1.3.4-beta"),
+        lib(lic="GPL-3.0-only"),
+        lib(lic="LGPL-3.0-or-later AND GPL-2.0"),
+    ],
+)
+def test_exception_does_not_widen(tmp_path: Path, p: dict[str, str]) -> None:
+    assert lg.check([p], dev=False, exceptions=exc(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        EXC.replace('approved_by = "owner"', 'approved_by = "agent"'),
+        EXC.replace('name = "@img/sharp-libvips-linux-x64"', 'name = "@img/sharp-libvips-*"'),
+        EXC.replace('versions = ">=1.3.4,<1.4.0"', 'versions = "~1.3"'),
+        EXC.replace('versions = ">=1.3.4,<1.4.0"', 'versions = ""'),
+        EXC.replace('reason = "optional native library"\n', ""),
+        EXC.replace("date = 2026-11-21", 'date = "yesterday"'),
+        EXC + 'extra = "x"\n',
+        "[[exception]]\n",
+        "not toml [",
+    ],
+)
+def test_malformed_exceptions_fail_closed(tmp_path: Path, bad: str) -> None:
+    with pytest.raises(ValueError):
+        exc(tmp_path, bad)
+
+
+def test_repo_exceptions_file_is_valid_and_exact() -> None:
+    entries = lg.load_exceptions(lg.DEFAULT_EXCEPTIONS)
+    names = {e.name for e in entries}
+    assert "caniuse-lite" in names
+    assert all("*" not in n for n in names)
+    assert {n for n in names if n.startswith("@img/")} == {
+        f"@img/sharp-libvips-{p}"
+        for p in ["darwin-arm64", "darwin-x64", "linux-arm", "linux-arm64", "linux-ppc64", "linux-riscv64",
+                  "linux-s390x", "linux-x64", "linuxmusl-arm64", "linuxmusl-x64"]
+    }
+
+
+def test_cli_uses_exceptions_file(tmp_path: Path) -> None:
+    f = tmp_path / "npm.json"
+    f.write_text(json.dumps({"@img/sharp-libvips-linux-x64@1.3.4": {"licenses": "LGPL-3.0-or-later"}}))
+    (tmp_path / "exc.toml").write_text(EXC)
+    assert run_cli("--npm-json", str(f), "--exceptions", str(tmp_path / "exc.toml")).returncode == 0
+    (tmp_path / "none.toml").write_text("")
+    assert run_cli("--npm-json", str(f), "--exceptions", str(tmp_path / "none.toml")).returncode == 1
+    (tmp_path / "bad.toml").write_text("[[exception]]\n")
+    assert run_cli("--npm-json", str(f), "--exceptions", str(tmp_path / "bad.toml")).returncode == 1

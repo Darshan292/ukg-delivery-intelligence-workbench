@@ -12,13 +12,22 @@ SPDX expressions: `A OR B` passes if either side does; `A AND B` only if both
 do; `X WITH exception` is judged on X. Several PyPI classifiers joined by ";"
 and npm licence arrays are treated as AND (the conservative reading).
 
-Usage: license_gate.py (--pip-json FILE | --npm-json FILE) [--dev]
+Exceptions: licence-exceptions.toml (repo root) lists owner-approved packages
+by exact name, version range (">=a,<b"; numeric dotted versions only) and the
+exact licence string. Anything malformed fails closed. New entries need the
+owner's approval (approved_by = "owner").
+
+Usage: license_gate.py (--pip-json FILE | --npm-json FILE) [--dev] [--exceptions FILE]
 """
 
 import argparse
+import datetime
 import json
+import operator
 import re
 import sys
+import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -114,11 +123,67 @@ def classify(license_text: str) -> Verdict:
     return max(verdicts, key=_RANK.__getitem__)
 
 
-def check(packages: list[dict[str, str]], dev: bool) -> list[str]:
+DEFAULT_EXCEPTIONS = Path(__file__).resolve().parent.parent / "licence-exceptions.toml"
+_FIELDS = {"name", "versions", "licence", "reason", "approved_by", "date"}
+_OPS = {">=": operator.ge, ">": operator.gt, "<=": operator.le, "<": operator.lt, "==": operator.eq}
+_VERSION = re.compile(r"^\d+(\.\d+)*$")
+
+
+@dataclass(frozen=True)
+class LicenceException:
+    name: str
+    versions: tuple[tuple[str, tuple[int, ...]], ...]
+    licence: str
+
+    def covers(self, p: dict[str, str]) -> bool:
+        ver = p.get("version", "")
+        if p.get("name") != self.name or p.get("license") != self.licence or not _VERSION.match(ver):
+            return False
+        v = tuple(int(x) for x in ver.split("."))
+        return all(_OPS[op](v, bound) for op, bound in self.versions)
+
+
+def _range(text: str) -> tuple[tuple[str, tuple[int, ...]], ...]:
+    out: list[tuple[str, tuple[int, ...]]] = []
+    for part in text.split(","):
+        m = re.fullmatch(r"\s*(>=|<=|==|>|<)\s*(\d+(?:\.\d+)*)\s*", part)
+        if not m:
+            raise ValueError(f"bad version range {text!r}")
+        out.append((m[1], tuple(int(x) for x in m[2].split("."))))
+    return tuple(out)
+
+
+def load_exceptions(path: Path) -> list[LicenceException]:
+    try:
+        data = tomllib.loads(path.read_text())
+    except tomllib.TOMLDecodeError as e:
+        raise ValueError(f"{path}: {e}") from e
+    if set(data) - {"exception"}:
+        raise ValueError(f"{path}: unknown top-level keys")
+    out: list[LicenceException] = []
+    for i, e in enumerate(data.get("exception", [])):
+        where = f"{path} exception {i + 1}"
+        if not isinstance(e, dict) or set(e) != _FIELDS:
+            raise ValueError(f"{where}: needs exactly the fields {sorted(_FIELDS)}")
+        if not all(isinstance(e[k], str) and e[k].strip() for k in _FIELDS - {"date"}):
+            raise ValueError(f"{where}: fields must be non-empty strings")
+        if e["approved_by"] != "owner" or not isinstance(e["date"], datetime.date):
+            raise ValueError(f"{where}: needs approved_by = \"owner\" and a TOML date")
+        if not re.fullmatch(r"[@A-Za-z0-9._/-]+", e["name"]):  # exact names only, no wildcards
+            raise ValueError(f"{where}: name must be an exact package name")
+        out.append(LicenceException(e["name"], _range(e["versions"]), e["licence"]))
+    return out
+
+
+def check(
+    packages: list[dict[str, str]], dev: bool, exceptions: list[LicenceException] | None = None
+) -> list[str]:
     out: list[str] = []
     for p in packages:
         lic = p.get("license", "")
         v = classify(lic)
+        if any(x.covers(p) for x in exceptions or []):
+            continue
         if v == "deny" or (v == "dev_only" and not dev):
             why = "dev-only licence in runtime set" if v == "dev_only" else "denied or unknown licence"
             out.append(f"{p.get('name', '?')} {p.get('version', '')}: {lic!r} ({why})")
@@ -151,12 +216,18 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--pip-json", type=Path)
     g.add_argument("--npm-json", type=Path)
     ap.add_argument("--dev", action="store_true", help="allow dev-only (LGPL) licences")
+    ap.add_argument("--exceptions", type=Path, default=DEFAULT_EXCEPTIONS)
     a = ap.parse_args(argv)
+    try:
+        exceptions = load_exceptions(a.exceptions)
+    except (OSError, ValueError) as e:
+        print(f"LICENCE GATE: cannot load exceptions ({e}); failing closed")
+        return 1
     pkgs = load_pip(a.pip_json) if a.pip_json else load_npm(a.npm_json)
     if not pkgs:
         print("LICENCE GATE: no packages in input; failing closed")
         return 1
-    bad = check(pkgs, a.dev)
+    bad = check(pkgs, a.dev, exceptions)
     for line in bad:
         print(f"LICENCE VIOLATION: {line}")
     print(f"checked {len(pkgs)} packages, {len(bad)} violation(s)")
