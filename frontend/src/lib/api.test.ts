@@ -25,6 +25,7 @@ describe("fetchNeighbourhood", () => {
 
   it.each([
     [404, "No entity with key NOPE. Check the key in the address (?entity=...)."],
+    [409, "More than one entity has the key NOPE; add entity_type or product_profile."],
     [422, "Entity keys use letters, digits, dot, underscore and hyphen, up to 100 characters."],
     [503, "The API is not reachable. Start the backend and reload."],
   ])("maps %i to ApiError", async (status, message) => {

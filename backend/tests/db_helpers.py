@@ -3,17 +3,20 @@
 """Helpers for tests that talk to Postgres. FICTIONAL data only."""
 
 import importlib.util
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session
 
-from app.db import sqlstate
+from app.db import get_session, sqlstate
 from app.domain.records import Records
+from app.main import create_app
 
 _MIG = Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0002_d3_schema.py"
 
@@ -51,3 +54,15 @@ def norm(r: Records) -> dict[str, Any]:
         cat["relationship_types"] = sorted(cat["relationship_types"], key=lambda t: t["name"])
     d["catalogues"] = sorted(d["catalogues"], key=lambda c: c["product_profile"])
     return d
+
+
+def client_for(engine: Engine) -> TestClient:
+    """The app served on `engine`; server errors become responses, as in production."""
+    app = create_app()
+
+    def _session() -> Iterator[Session]:
+        with Session(engine) as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _session
+    return TestClient(app, raise_server_exceptions=False)

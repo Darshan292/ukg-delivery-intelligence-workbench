@@ -9,14 +9,14 @@ import pytest
 from fastapi.testclient import TestClient
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from sqlalchemy import Engine, delete, event
+from sqlalchemy import Engine, event
 from sqlalchemy.orm import Session
 
 from app.db import create_db_engine, get_session
 from app.main import create_app
-from app.models import Entity, EvidenceLocator, Relationship
-
-pytestmark = pytest.mark.xfail(strict=True, reason="re-pointed in Task 3")
+from app.store import save
+from tests.db_helpers import client_for
+from tests.domain.builders import World
 
 NOTICE = "Tracer bullet: shows stored links around the entity. This is not impact analysis."
 
@@ -57,9 +57,9 @@ def test_neighbourhood_rule_t1_exact(graph_client: TestClient) -> None:
         "fictional": True,
         "notice": NOTICE,
         "nodes": [
-            _node("REQ-T1", "Fictional requirement", "requirement", "linked"),
-            _node("RULE-T1", "Fictional rule", "rule", "seed"),
-            _node("TEST-T1", "Fictional test", "test", "linked"),
+            _node("REQ-T1", "REQ-T1", "requirement", "linked"),
+            _node("RULE-T1", "RULE-T1", "rule", "seed"),
+            _node("TEST-T1", "TEST-T1", "test", "linked"),
         ],
         "edges": [E1, E2],
     }
@@ -160,12 +160,14 @@ def test_two_calls_byte_identical(graph_client: TestClient) -> None:
     assert a == b
 
 
-def test_edge_without_locator_is_generic_500(
-    graph_client: TestClient, graph_engine: Engine
-) -> None:
-    with Session(graph_engine) as s, s.begin():
-        s.execute(delete(EvidenceLocator))
-    r = graph_client.get("/neighbourhood", params={"entity": "RULE-T1"})
+def test_edge_without_claim_is_generic_500(store: Engine) -> None:
+    w = World()
+    w.service()
+    a, q = w.entity("cfg", "A"), w.entity("req", "Q")
+    w.rel("implements", a, q)  # no claim: no provenance
+    with store.begin() as c:
+        save(c, w.build())
+    r = client_for(store).get("/neighbourhood", params={"entity": "A"})
     assert r.status_code == 500
     assert r.text == "Internal Server Error"
 
@@ -201,41 +203,67 @@ def _count_sql(engine: Engine, client: TestClient, key: str) -> int:
     return n
 
 
-def test_sql_statement_count_is_constant_in_edge_count(
-    graph_client: TestClient, graph_engine: Engine
-) -> None:
-    def add_edges(prefix: str, count: int) -> None:
-        with Session(graph_engine) as s, s.begin():
-            hub = Entity(
-                product_profile="synthetic", entity_type="rule", natural_key=prefix, label="Hub"
-            )
-            s.add(hub)
-            s.flush()
-            for i in range(count):
-                leaf = Entity(
-                    product_profile="synthetic",
-                    entity_type="test",
-                    natural_key=f"{prefix}-L{i}",
-                    label="Leaf",
-                )
-                s.add(leaf)
-                s.flush()
-                rel = Relationship(
-                    type="verifies", source_entity_id=leaf.id, target_entity_id=hub.id
-                )
-                s.add(rel)
-                s.flush()
-                s.add(
-                    EvidenceLocator(
-                        relationship_id=rel.id,
-                        kind="xlsx_cell",
-                        locator={"file": "f.xlsx", "sheet": "S", "cell": f"B{i}"},
-                        snippet="FICTIONAL",
-                    )
-                )
+def test_sql_statement_count_is_constant_in_edge_count(store: Engine) -> None:
+    w = World()
+    dv = w.design()
+    for prefix, count in (("HUB-2", 2), ("HUB-10", 10)):
+        hub = w.entity("cfg", prefix)
+        for i in range(count):
+            leaf = w.entity("cfg", f"{prefix}-L{i}")
+            w.claim(w.rel("uses", leaf, hub), dv)
+    with store.begin() as c:
+        save(c, w.build())
+    client = client_for(store)
+    assert _count_sql(store, client, "HUB-2") == _count_sql(store, client, "HUB-10")
 
-    add_edges("HUB-2", 2)
-    add_edges("HUB-10", 10)
-    assert _count_sql(graph_engine, graph_client, "HUB-2") == _count_sql(
-        graph_engine, graph_client, "HUB-10"
+
+def _ambiguous_client(store: Engine) -> TestClient:
+    w = World()
+    w.entity("cfg", "X")
+    w.entity("req", "X")
+    with store.begin() as c:
+        save(c, w.build())
+    return client_for(store)
+
+
+def test_ambiguous_key_409_lists_candidates(store: Engine) -> None:
+    client = _ambiguous_client(store)
+    r = client.get("/neighbourhood", params={"entity": "X"})
+    assert r.status_code == 409
+    assert r.json() == {
+        "detail": "ambiguous entity",
+        "candidates": [
+            {"product_profile": "synthetic", "entity_type": "cfg", "natural_key": "X"},
+            {"product_profile": "synthetic", "entity_type": "req", "natural_key": "X"},
+        ],
+    }
+    # a return-first-row implementation would answer 200 here (the #13 bug)
+    ok = client.get("/neighbourhood", params={"entity": "X", "entity_type": "req"})
+    assert ok.status_code == 200
+    assert [(n["id"], n["entity_type"]) for n in ok.json()["nodes"]] == [("X", "req")]
+    assert (
+        client.get(
+            "/neighbourhood", params={"entity": "X", "product_profile": "synthetic"}
+        ).status_code
+        == 409
     )
+
+
+def test_409_body_never_echoes_query_extras(store: Engine) -> None:
+    client = _ambiguous_client(store)
+    probe = "zz-probe-extra"
+    r = client.get("/neighbourhood", params={"entity": "X", "entity_type": probe})
+    assert r.status_code == 404
+    assert probe not in r.text
+    r = client.get("/neighbourhood", params={"entity": "X", "product_profile": "made_up"})
+    assert r.status_code == 422
+    assert "made_up" not in r.text
+
+
+@pytest.mark.parametrize("value", ["made_up", "", "'; DROP TABLE entity;--"])
+def test_hostile_product_profile_422_no_echo(graph_client: TestClient, value: str) -> None:
+    r = graph_client.get("/neighbourhood", params={"entity": "RULE-T1", "product_profile": value})
+    assert r.status_code == 422
+    assert r.json()["errors"][0]["loc"] == ["query", "product_profile"]
+    if value:
+        assert value not in r.text

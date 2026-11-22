@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.main import create_app
-from tests.db_helpers import truncate
+from tests.db_helpers import client_for, truncate
 from tests.pg_locate import find_pg_ctl
 
 
@@ -107,34 +107,10 @@ def store(migrated_url: URL) -> Iterator[Engine]:
 
 
 @pytest.fixture
-def graph_engine(db_engine: Engine, db_url: URL) -> Engine:
-    """Migrated database with empty tracer tables."""
-    from pathlib import Path
-
-    from alembic import command
-    from alembic.config import Config
-
-    root = Path(__file__).resolve().parent.parent
-    cfg = Config(str(root / "alembic.ini"))
-    cfg.set_main_option("script_location", str(root / "migrations"))
-    cfg.attributes["url"] = db_url.render_as_string(hide_password=False)
-    command.upgrade(cfg, "head")
-    with db_engine.begin() as c:
-        c.execute(text("TRUNCATE evidence_locator, relationship, entity RESTART IDENTITY CASCADE"))
-    return db_engine
-
-
-@pytest.fixture
-def graph_client(graph_engine: Engine) -> Iterator[TestClient]:
+def graph_client(store: Engine) -> TestClient:
+    """Tracer seed saved, app served on the same engine."""
     from app.seed import seed_tracer_graph
 
-    with Session(graph_engine) as s:
-        seed_tracer_graph(s)
-    app = create_app()
-
-    def _session() -> Iterator[Session]:
-        with Session(graph_engine) as s:
-            yield s
-
-    app.dependency_overrides[get_session] = _session
-    yield TestClient(app, raise_server_exceptions=False)
+    with store.begin() as c:
+        seed_tracer_graph(c)
+    return client_for(store)
