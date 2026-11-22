@@ -121,6 +121,10 @@ def _targets(rels_name: str, root: Element, names: set[str]) -> list[tuple[str, 
         rtype = rel.get("Type", "").rsplit("/", 1)[-1].lower()
         if rtype in _REL_REFUSED:
             raise IntakeRejected(_REL_REFUSED[rtype])
+        rid = rel.get("Id", "")
+        if rid in seen:  # which duplicate a reader picks differs: refuse (external ones too)
+            raise IntakeRejected("package_inconsistent")
+        seen.add(rid)
         if rel.get("TargetMode") == "External":
             if rtype != "hyperlink":
                 raise IntakeRejected("external_link")
@@ -131,10 +135,6 @@ def _targets(rels_name: str, root: Element, names: set[str]) -> list[tuple[str, 
             raise IntakeRejected("archive_bad_entry_name")
         if path not in names:
             raise IntakeRejected("workbook_malformed")
-        rid = rel.get("Id", "")
-        if rid in seen:  # which duplicate a reader picks differs: refuse
-            raise IntakeRejected("package_inconsistent")
-        seen.add(rid)
         out.append((rid, rtype, path))
     return out
 

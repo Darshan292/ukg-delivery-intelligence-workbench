@@ -416,3 +416,12 @@ def test_sheet_target_cannot_be_a_rels_part_inside_the_sheet_folder() -> None:
     rels = _part(data, WB_RELS).replace(b"/xl/worksheets/sheet1.xml", b"/" + sheet_rels.encode())
     crafted = rewrite_zip(data, replace={WB_RELS: rels}, add={sheet_rels: empty})
     _rejects(crafted, "unsupported_part")
+
+
+def test_duplicate_id_shared_with_an_external_hyperlink_rejected() -> None:
+    # The external entry used to skip the duplicate check, so rId1 could name two targets.
+    dup = (
+        f'<Relationship Id="rId1" Type="{REL_NS}/hyperlink"'
+        ' Target="https://example.invalid/" TargetMode="External"/>'
+    )
+    _rejects(_with_rel(dup), "package_inconsistent")
