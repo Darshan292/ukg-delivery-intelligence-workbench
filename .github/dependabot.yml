@@ -33,6 +33,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Postgres stays on 16 to match the test database (pg-local and CI use Ubuntu 24.04's PostgreSQL 16).
+      # Move all three together in one deliberate change.
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
