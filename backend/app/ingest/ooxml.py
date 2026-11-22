@@ -114,6 +114,7 @@ def _targets(rels_name: str, root: Element, names: set[str]) -> list[tuple[str, 
     """Check one .rels part; return (id, type, resolved part) of its internal relationships."""
     base = posixpath.dirname(posixpath.dirname(rels_name))  # the source part's folder
     out: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
     for rel in root:
         if not rel.tag.endswith("Relationship"):
             continue
@@ -130,7 +131,11 @@ def _targets(rels_name: str, root: Element, names: set[str]) -> list[tuple[str, 
             raise IntakeRejected("archive_bad_entry_name")
         if path not in names:
             raise IntakeRejected("workbook_malformed")
-        out.append((rel.get("Id", ""), rtype, path))
+        rid = rel.get("Id", "")
+        if rid in seen:  # which duplicate a reader picks differs: refuse
+            raise IntakeRejected("package_inconsistent")
+        seen.add(rid)
+        out.append((rid, rtype, path))
     return out
 
 

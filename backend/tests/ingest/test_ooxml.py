@@ -390,3 +390,16 @@ def test_hyperlink_range_counts_as_cells() -> None:
         '<hyperlinks><hyperlink ref="A1:XFD1048576" display="x"/></hyperlinks></worksheet>'
     ).encode()
     _rejects(rewrite_zip(_wb(), replace={"xl/worksheets/sheet1.xml": sheet}), "sheet_too_large")
+
+
+def test_duplicate_relationship_id_rejected() -> None:
+    dup = f'<Relationship Id="rId1" Type="{REL_NS}/worksheet" Target="/xl/worksheets/big.xml"/>'
+    data = _with_rel(dup)
+    data = rewrite_zip(data, add={"xl/worksheets/big.xml": _sheet_with_merge("A1:Z4000")})
+    _rejects(data, "package_inconsistent", Limits(max_merged_cells=1000))
+
+
+def test_sheet_target_cannot_be_a_structural_part() -> None:
+    data = _wb()
+    rels = _part(data, WB_RELS).replace(b"/xl/worksheets/sheet1.xml", b"/xl/workbook.xml")
+    _rejects(rewrite_zip(data, replace={WB_RELS: rels}), "unsupported_part")
