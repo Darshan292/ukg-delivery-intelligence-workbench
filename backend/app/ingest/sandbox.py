@@ -1,61 +1,77 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
-"""Run untrusted-input parsing in a resource-limited child process (spawn, not fork).
+"""Run untrusted-input parsing in a resource-limited child process with an empty environment.
 
-The child sets RLIMIT_AS and RLIMIT_CPU, runs one module-level function, and returns only JSON.
-Timeout, out-of-memory or crash all become IntakeRejected("resource_limit"). Linux only
-(`resource`); reusable for the PDF worker (Task 11).
+The child is a fresh interpreter (`python -I`, no inherited environment, cwd "/"), so it holds
+none of the parent's state or secrets. It sets RLIMIT_AS, CPU, CORE, FSIZE and NOFILE itself,
+runs one module-level function and returns only JSON. Timeout, out-of-memory, crash, a start
+failure or a reply over the cap all become IntakeRejected("resource_limit"). Linux only
+(`resource`); reusable for the PDF worker (Task 11). It does NOT isolate network or filesystem
+reads: see docs/decisions/0005-ingest-worker-sandbox.md.
 """
 
 import contextlib
+import dataclasses
 import json
-import multiprocessing
-import resource
+import os
+import selectors
+import struct
+import subprocess
+import sys
+import time
 from collections.abc import Callable
-from multiprocessing.connection import Connection
+from pathlib import Path
 from typing import Any, get_args
 
 from app.ingest.errors import IntakeRejected, Limits, Reason
 
 _REASONS = frozenset(get_args(Reason))
+_ROOT = str(Path(__file__).resolve().parents[2])  # the folder that holds the `app` package
+_BOOT = (
+    "import sys; sys.path.insert(0, sys.argv[3]); "
+    "from app.ingest.worker import main; main(int(sys.argv[1]), int(sys.argv[2]))"
+)
+_CHUNK = 65536
 
 
-def _at_memory_limit(limit: int) -> bool:
-    """Libraries often swallow or re-wrap MemoryError; the peak address space still shows it."""
-    try:
-        with open("/proc/self/status", encoding="ascii") as f:
-            for line in f:
-                if line.startswith("VmPeak:"):
-                    return int(line.split()[1]) * 1024 >= limit * 0.95
-    except (OSError, ValueError):
-        pass
-    return False
-
-
-def _child(
-    conn: Connection,
-    func: Callable[[bytes, Limits], object],
-    data: bytes,
-    limits: Limits,
-    on_error: Reason,
-) -> None:
-    try:
-        mem = limits.worker_memory_bytes
-        resource.setrlimit(resource.RLIMIT_AS, (mem, mem))
-        cpu = int(limits.worker_seconds) + 1
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu + 1))
-        msg: dict[str, Any] = {"ok": func(data, limits)}
-    except IntakeRejected as e:
-        msg = {"error": e.reason}
-    except MemoryError:
-        msg = {"error": "resource_limit"}
-    except BaseException:  # noqa: BLE001  (text of any other error may hold file content)
-        msg = {
-            "error": "resource_limit" if _at_memory_limit(limits.worker_memory_bytes) else on_error
-        }
-    with contextlib.suppress(BaseException):  # on failure the parent sees EOF: resource_limit
-        conn.send_bytes(json.dumps(msg, ensure_ascii=False).encode("utf-8"))
-    conn.close()
+def _exchange(proc: subprocess.Popen[bytes], payload: bytes, limits: Limits) -> bytes:
+    """Feed stdin and collect stdout without blocking past the deadline or the reply cap."""
+    assert proc.stdin and proc.stdout  # noqa: S101  (PIPE was requested)
+    stdin, stdout = proc.stdin, proc.stdout
+    os.set_blocking(stdin.fileno(), False)
+    os.set_blocking(stdout.fileno(), False)
+    sel = selectors.DefaultSelector()
+    sel.register(stdin, selectors.EVENT_WRITE)
+    sel.register(stdout, selectors.EVENT_READ)
+    deadline = time.monotonic() + limits.worker_seconds
+    pos, out = 0, bytearray()
+    while True:
+        left = deadline - time.monotonic()
+        events = sel.select(left) if left > 0 else []
+        if not events:
+            raise IntakeRejected("resource_limit")  # wall clock
+        for key, _ in events:
+            if key.fileobj is stdin:
+                try:
+                    pos += os.write(stdin.fileno(), payload[pos : pos + _CHUNK])
+                except BlockingIOError:
+                    continue
+                except BrokenPipeError:
+                    pos = len(payload)  # the child is gone; its end shows on stdout
+                if pos >= len(payload):
+                    sel.unregister(stdin)
+                    with contextlib.suppress(OSError):
+                        stdin.close()
+            else:
+                try:
+                    chunk = os.read(stdout.fileno(), _CHUNK)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    return bytes(out)
+                out += chunk
+                if len(out) > limits.worker_max_reply_bytes:
+                    raise IntakeRejected("resource_limit")  # never parsed
 
 
 def run_sandboxed(
@@ -65,24 +81,47 @@ def run_sandboxed(
     on_error: Reason = "workbook_malformed",
 ) -> Any:
     """`func` must be a module-level function returning JSON-able data."""
-    ctx = multiprocessing.get_context("spawn")  # spawn: the child holds no parent state
-    recv, send = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child, args=(send, func, data, limits, on_error), daemon=True)
-    proc.start()
-    send.close()
+    header = json.dumps(
+        {
+            "func": f"{func.__module__}:{func.__qualname__}",
+            "limits": dataclasses.asdict(limits),
+            "on_error": on_error,
+        }
+    ).encode()
+    payload = struct.pack(">II", len(header), len(data)) + header + data
+    cmd = [
+        sys.executable,
+        "-I",
+        "-B",
+        "-c",
+        _BOOT,
+        str(limits.worker_memory_bytes),
+        str(int(limits.worker_seconds) + 1),
+        _ROOT,
+    ]
     try:
-        if not recv.poll(limits.worker_seconds):
-            raise IntakeRejected("resource_limit")
-        try:
-            raw = recv.recv_bytes(limits.worker_max_reply_bytes)  # over the cap: never parsed
-        except (EOFError, OSError):
-            raise IntakeRejected("resource_limit") from None
+        proc = subprocess.Popen(  # noqa: S603  (fixed argv; no shell; no input in argv)
+            cmd,
+            env={},  # nothing inherited: the child must not see the parent's secrets
+            cwd="/",
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+    except Exception:  # OSError, ValueError, ...: never a raw error with details
+        raise IntakeRejected("resource_limit") from None
+    try:
+        raw = _exchange(proc, payload, limits)
     finally:
-        if proc.is_alive():
-            proc.kill()
-        proc.join()
-        proc.close()
-        recv.close()
+        proc.kill()  # no-op if it already exited
+        proc.wait()
+        for pipe in (proc.stdin, proc.stdout):
+            if pipe:
+                with contextlib.suppress(OSError):
+                    pipe.close()
+    if not raw:
+        raise IntakeRejected("resource_limit")  # crashed or killed before replying
     try:
         msg = json.loads(raw)
         if "error" in msg:
