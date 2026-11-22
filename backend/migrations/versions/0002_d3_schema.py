@@ -34,40 +34,51 @@ TABLES = (
 )
 
 
-# Raw string: the DDL contains backslashes (regex classes).
+# Every character Python's str.isspace() treats as space, plus the invisible U+180E and U+FEFF.
+# The DB must treat at least what the domain (pydantic's \S, str.strip) treats as blank, or one
+# stored row could make load() fail for good. tests/db/test_domain_gap.py pins the equivalence.
+WS = r"\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+
+PRE_DDL = r"""
+CREATE FUNCTION public.wb_all_nonblank(vals text[]) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
+  SELECT NOT EXISTS (SELECT 1 FROM unnest(vals) v WHERE v IS NULL OR v !~ '[^__WS__]') $$;
+"""
+
 TABLES_DDL = r"""
 CREATE TABLE actor (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_actor_id CHECK (id > 0),
   kind text NOT NULL CONSTRAINT ck_actor_kind CHECK (kind IN ('human','service')),
-  display_name text NOT NULL CONSTRAINT ck_actor_name CHECK (display_name ~ '\S'),
-  roles text[] NOT NULL
+  display_name text NOT NULL CONSTRAINT ck_actor_name CHECK (display_name ~ '[^__WS__]'),
+  roles text[] NOT NULL CONSTRAINT ck_actor_roles CHECK (public.wb_all_nonblank(roles))
 );
 CREATE TABLE catalogue_entity_type (
   product_profile text NOT NULL CONSTRAINT ck_cet_profile CHECK (product_profile IN ('synthetic','ukg_pro_wfm','workforce_central')),
-  name text COLLATE "C" NOT NULL,
+  name text COLLATE "C" NOT NULL CONSTRAINT ck_cet_name CHECK (name ~ '[^__WS__]'),
   snapshot_scoped boolean NOT NULL,
-  display_only_attributes text[] NOT NULL,
+  display_only_attributes text[] NOT NULL CONSTRAINT ck_cet_display CHECK (public.wb_all_nonblank(display_only_attributes)),
   PRIMARY KEY (product_profile, name)
 );
 CREATE TABLE catalogue_relationship_type (
   product_profile text NOT NULL CONSTRAINT ck_crt_profile CHECK (product_profile IN ('synthetic','ukg_pro_wfm','workforce_central')),
-  name text COLLATE "C" NOT NULL,
+  name text COLLATE "C" NOT NULL CONSTRAINT ck_crt_name CHECK (name ~ '[^__WS__]'),
   qualifier_required boolean NOT NULL,
   single_valued_for jsonb NOT NULL,            -- [[source type, target type], ...] in catalogue order
   PRIMARY KEY (product_profile, name)
 );
 CREATE TABLE snapshot (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_snapshot_id CHECK (id > 0),
   product_profile text NOT NULL CONSTRAINT ck_snapshot_profile CHECK (product_profile IN ('synthetic','ukg_pro_wfm','workforce_central','unknown')),
-  environment text NOT NULL, label text NOT NULL, captured_at timestamptz NOT NULL
+  environment text NOT NULL CONSTRAINT ck_snapshot_env CHECK (environment ~ '[^__WS__]'),
+  label text NOT NULL CONSTRAINT ck_snapshot_label CHECK (label ~ '[^__WS__]'),
+  captured_at timestamptz NOT NULL
 );
 CREATE TABLE document (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_document_id CHECK (id > 0),
   product_profile text NOT NULL CONSTRAINT ck_document_profile CHECK (product_profile IN ('synthetic','ukg_pro_wfm','workforce_central','unknown')),
-  title text NOT NULL
+  title text NOT NULL CONSTRAINT ck_document_title CHECK (title ~ '[^__WS__]')
 );
 CREATE TABLE document_version (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_document_version_id CHECK (id > 0),
   document_id bigint NOT NULL REFERENCES document,
   sha256 text NOT NULL UNIQUE CONSTRAINT ck_dv_sha256 CHECK (sha256 ~ '^[0-9a-f]{64}$'),
   snapshot_id bigint REFERENCES snapshot,
@@ -77,27 +88,28 @@ CREATE TABLE document_version (
   uploaded_at timestamptz NOT NULL
 );
 CREATE TABLE evidence_locator (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_evidence_locator_id CHECK (id > 0),
   document_version_id bigint NOT NULL REFERENCES document_version,
   kind text NOT NULL CONSTRAINT ck_locator_kind CHECK (kind IN ('xlsx_cell','pdf_word_bbox')),
   locator jsonb NOT NULL,                       -- kind-specific fields only (sheet, cell | page, x0..)
   snippet text NOT NULL,
-  extractor text NOT NULL CONSTRAINT ck_locator_extractor CHECK (extractor ~ '^[^@\s]+@[^@\s]+$'),
+  extractor text NOT NULL CONSTRAINT ck_locator_extractor CHECK (extractor ~ '^[^@__WS__]+@[^@__WS__]+$'),
   extracted_at timestamptz NOT NULL,
   CONSTRAINT uq_locator_content UNIQUE (document_version_id, kind, extractor, locator)  -- = domain content_key
 );
 CREATE TABLE entity (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_entity_id CHECK (id > 0),
   product_profile text NOT NULL CONSTRAINT ck_entity_product_profile CHECK (product_profile IN ('synthetic','ukg_pro_wfm','workforce_central','unknown')),
-  entity_type text COLLATE "C" NOT NULL,
-  natural_key text COLLATE "C" NOT NULL,
+  entity_type text COLLATE "C" NOT NULL CONSTRAINT ck_entity_type CHECK (entity_type ~ '[^__WS__]'),
+  -- non-blank and already trimmed, as the domain's normalise_key_v1 requires
+  natural_key text COLLATE "C" NOT NULL CONSTRAINT ck_entity_key CHECK (natural_key ~ '[^__WS__]' AND natural_key !~ '^[__WS__]|[__WS__]$'),
   -- unknown-profile entities have no catalogue (decision 0003 Q7): NULL skips the FK
   catalogue_profile text GENERATED ALWAYS AS (NULLIF(product_profile, 'unknown')) STORED,
   CONSTRAINT uq_entity_key UNIQUE (product_profile, entity_type, natural_key),
   FOREIGN KEY (catalogue_profile, entity_type) REFERENCES catalogue_entity_type (product_profile, name)
 );
 CREATE TABLE entity_version (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_entity_version_id CHECK (id > 0),
   entity_id bigint NOT NULL REFERENCES entity,
   document_version_id bigint NOT NULL REFERENCES document_version,
   snapshot_id bigint REFERENCES snapshot,
@@ -106,24 +118,25 @@ CREATE TABLE entity_version (
   CONSTRAINT uq_entity_version UNIQUE (entity_id, document_version_id)
 );
 CREATE TABLE relationship (
-  id bigint PRIMARY KEY,
-  type text COLLATE "C" NOT NULL,
+  id bigint PRIMARY KEY CONSTRAINT ck_relationship_id CHECK (id > 0),
+  type text COLLATE "C" NOT NULL CONSTRAINT ck_relationship_type CHECK (type ~ '[^__WS__]'),
   source_entity_id bigint NOT NULL REFERENCES entity,
   target_entity_id bigint NOT NULL REFERENCES entity,
-  qualifier text,
+  qualifier text CONSTRAINT ck_relationship_qualifier CHECK (qualifier ~ '[^__WS__]'),
   created_at timestamptz NOT NULL,
   CONSTRAINT uq_relationship_key UNIQUE NULLS NOT DISTINCT (type, source_entity_id, target_entity_id, qualifier),
   CONSTRAINT ck_relationship_no_self CHECK (source_entity_id <> target_entity_id)
 );
 CREATE TABLE claim (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_claim_id CHECK (id > 0),
   relationship_id bigint NOT NULL REFERENCES relationship,
   basis text NOT NULL CONSTRAINT ck_claim_basis
     CHECK (basis IN ('explicit_source','deterministic_rule','llm_suggestion')),
   polarity text NOT NULL CONSTRAINT ck_claim_polarity CHECK (polarity IN ('present','absent')),
-  method text NOT NULL CONSTRAINT ck_claim_method CHECK (method ~ '^[^@\s]+@[^@\s]+$'),
+  method text NOT NULL CONSTRAINT ck_claim_method CHECK (method ~ '^[^@__WS__]+@[^@__WS__]+$'),
   confidence numeric CONSTRAINT ck_claim_confidence_range CHECK (confidence BETWEEN 0 AND 1),
-  model_id text, prompt_version text,
+  model_id text CONSTRAINT ck_claim_model CHECK (model_id ~ '[^__WS__]'),
+  prompt_version text CONSTRAINT ck_claim_prompt CHECK (prompt_version ~ '[^__WS__]'),
   scope_snapshot_id bigint REFERENCES snapshot,
   locator_ids bigint[] NOT NULL,                -- owner question S5-Q3 (pending): array instead of a ClaimEvidence table; sorted by trigger
   locator_set_hash text NOT NULL,               -- set by trigger (Task 9); client values ignored
@@ -135,13 +148,13 @@ CREATE TABLE claim (
   CONSTRAINT uq_claim_dedup UNIQUE (relationship_id, basis, method, polarity, locator_set_hash)
 );
 CREATE TABLE review_event (
-  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY CONSTRAINT ck_review_event_id CHECK (id > 0),
   target_kind text NOT NULL,
   claim_id bigint REFERENCES claim,
   relationship_id bigint REFERENCES relationship,
   scope_snapshot_id bigint REFERENCES snapshot,
   verdict text NOT NULL,
-  reason text CONSTRAINT ck_review_reason CHECK (reason ~ '\S'),
+  reason text CONSTRAINT ck_review_reason CHECK (reason ~ '[^__WS__]'),
   successor_relationship_id bigint REFERENCES relationship,
   actor_id bigint NOT NULL REFERENCES actor,
   at timestamptz NOT NULL DEFAULT now(),        -- ordering key (at, id); never client-set (Task 4)
@@ -157,9 +170,9 @@ CREATE TABLE review_event (
       AND successor_relationship_id IS DISTINCT FROM relationship_id))
 );
 CREATE TABLE unresolved_reference (
-  id bigint PRIMARY KEY,
+  id bigint PRIMARY KEY CONSTRAINT ck_unresolved_reference_id CHECK (id > 0),
   holder_entity_id bigint NOT NULL REFERENCES entity,
-  raw_reference text NOT NULL CONSTRAINT ck_unresolved_raw CHECK (raw_reference ~ '\S'),
+  raw_reference text NOT NULL CONSTRAINT ck_unresolved_raw CHECK (raw_reference ~ '[^__WS__]'),
   locator_id bigint NOT NULL REFERENCES evidence_locator,
   reason text NOT NULL CONSTRAINT ck_unresolved_reason
     CHECK (reason IN ('missing_target','uncatalogued_type','unknown_profile'))
@@ -312,7 +325,7 @@ CREATE TRIGGER wb_relationship_rules BEFORE INSERT ON public.relationship
 CREATE FUNCTION public.wb_claim_rules() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE n bigint; scopes bigint; scope bigint;
 BEGIN
-  SELECT count(*), count(DISTINCT coalesce(dv.snapshot_id, 0)), max(dv.snapshot_id)  -- ids start at 1
+  SELECT count(*), count(DISTINCT coalesce(dv.snapshot_id, -1)), max(dv.snapshot_id)  -- ids are > 0, so -1 cannot collide
     INTO n, scopes, scope
     FROM public.evidence_locator l JOIN public.document_version dv ON dv.id = l.document_version_id
    WHERE l.id = ANY (NEW.locator_ids);
@@ -361,7 +374,8 @@ CREATE TRIGGER wb_entity_version_rules BEFORE INSERT ON public.entity_version
 def upgrade() -> None:
     for t in ("evidence_locator", "relationship", "entity"):
         op.drop_table(t)
-    op.execute(TABLES_DDL)
+    op.execute(PRE_DDL.replace("__WS__", WS))
+    op.execute(TABLES_DDL.replace("__WS__", WS))
     op.execute(ROLES_DDL)
     op.execute(APPEND_ONLY_FN)
     for t in TABLES:
