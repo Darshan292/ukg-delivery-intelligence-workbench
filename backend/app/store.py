@@ -43,13 +43,21 @@ def _lineage_order(versions: tuple[d.DocumentVersion, ...]) -> list[d.DocumentVe
     return sorted(versions, key=lambda v: (depth(v), v.id))
 
 
-def _rows(r: Records, field: str) -> list[dict[str, Any]]:
+def _rows(r: Records, field: str, lineage: bool | None) -> list[dict[str, Any]]:
     # columns equal the model fields, except where noted
     match field:
         case "catalogues":
             return []  # handled in save()
         case "document_versions":
-            return [v.model_dump() for v in _lineage_order(r.document_versions)]
+            rows = [
+                v.model_dump()
+                for v in _lineage_order(r.document_versions)
+                if lineage is None or lineage == (v.supersedes_version_id is not None)
+            ]
+            for row in rows:  # a column that is named is a column that needs the privilege
+                if row["supersedes_version_id"] is None:
+                    del row["supersedes_version_id"]
+            return rows
         case "locators":
             out: list[dict[str, Any]] = []
             for loc in r.locators:
@@ -98,7 +106,14 @@ _TABLE: Final[dict[str, type[DeclarativeBase]]] = {
 }
 
 
-def save(conn: Connection, r: Records, fields: Collection[str] = ALL) -> None:
+def save(
+    conn: Connection,
+    r: Records,
+    fields: Collection[str] = ALL,
+    lineage: bool | None = None,
+) -> None:
+    """`lineage` splits document versions: False saves only plain ones, True only those that
+    supersede another (a human act, so the ingest role cannot write them), None saves both."""
     for field in ALL:  # Records field order is FK order
         if field not in fields:
             continue
@@ -109,7 +124,7 @@ def save(conn: Connection, r: Records, fields: Collection[str] = ALL) -> None:
             for e in sorted(r.review_events, key=lambda e: (e.at, e.id)):
                 row = e.model_dump(exclude={"id", "at"})
                 conn.execute(insert(m.ReviewEvent), row)
-        elif rows := _rows(r, field):
+        elif rows := _rows(r, field, lineage):
             conn.execute(insert(_TABLE[field]), rows)
 
 

@@ -110,6 +110,12 @@ _DV = (
 )
 
 
+_DV_PLAIN = (
+    "INSERT INTO document_version (id, document_id, sha256, snapshot_id, declared_by, uploaded_at)"
+    " VALUES (:id, :doc, repeat(:h, 64), :snap, :by, now())"
+)
+
+
 def _doc_of(engine: Engine, dv: int) -> int:
     with engine.connect() as c:
         return c.scalar(text("SELECT document_id FROM document_version WHERE id = :d"), {"d": dv})  # type: ignore[return-value]
@@ -121,20 +127,20 @@ def _new_version(
     return {"id": 50, "doc": doc, "h": h, "snap": snap, "sup": i.design_dv, "by": by}
 
 
-def test_lineage_by_service_actor_fails(ingest_engine: Engine, world_ids: Ids) -> None:
-    doc = _doc_of(ingest_engine, world_ids.design_dv)
-    with sqlstate_raised("WB002"), ingest_engine.begin() as c:
+def test_lineage_by_service_actor_fails(review_engine: Engine, world_ids: Ids) -> None:
+    doc = _doc_of(review_engine, world_ids.design_dv)
+    with sqlstate_raised("WB002"), review_engine.begin() as c:
         c.execute(text(_DV), _new_version(world_ids, doc, world_ids.service))
-    with ingest_engine.begin() as c:  # positive control: a human declarer is accepted
+    with review_engine.begin() as c:  # positive control: a human declarer is accepted
         c.execute(text(_DV), _new_version(world_ids, doc, world_ids.reviewer))
 
 
-def test_lineage_other_document_or_snapshot_fails(ingest_engine: Engine, world_ids: Ids) -> None:
-    other_doc = _doc_of(ingest_engine, world_ids.export_dv)
-    with sqlstate_raised("WB003"), ingest_engine.begin() as c:
+def test_lineage_other_document_or_snapshot_fails(review_engine: Engine, world_ids: Ids) -> None:
+    other_doc = _doc_of(review_engine, world_ids.export_dv)
+    with sqlstate_raised("WB003"), review_engine.begin() as c:
         c.execute(text(_DV), _new_version(world_ids, other_doc, world_ids.reviewer))
-    doc = _doc_of(ingest_engine, world_ids.design_dv)
-    with sqlstate_raised("WB003"), ingest_engine.begin() as c:  # design has no snapshot
+    doc = _doc_of(review_engine, world_ids.design_dv)
+    with sqlstate_raised("WB003"), review_engine.begin() as c:  # design has no snapshot
         c.execute(text(_DV), _new_version(world_ids, doc, world_ids.reviewer, snap=world_ids.s1))
 
 
@@ -144,9 +150,16 @@ def test_document_version_snapshot_profile_mismatch_fails(
     with ingest_engine.begin() as c:
         c.execute(text("INSERT INTO snapshot VALUES (77, 'ukg_pro_wfm', 'dev', 'x', now())"))
     doc = _doc_of(ingest_engine, world_ids.design_dv)  # a synthetic document
-    params = {"id": 51, "doc": doc, "h": "f", "snap": 77, "sup": None, "by": world_ids.service}
+    params = {"id": 51, "doc": doc, "h": "f", "snap": 77, "by": world_ids.service}
     with sqlstate_raised("WB003"), ingest_engine.begin() as c:
-        c.execute(text(_DV), params)
+        c.execute(text(_DV_PLAIN), params)
+
+
+def test_ingest_cannot_forge_a_lineage_declaration(ingest_engine: Engine, world_ids: Ids) -> None:
+    """wb_ingest names a human declarer, so the trigger would accept it: privileges must not."""
+    doc = _doc_of(ingest_engine, world_ids.design_dv)
+    with sqlstate_raised("42501"), ingest_engine.begin() as c:
+        c.execute(text(_DV), _new_version(world_ids, doc, world_ids.reviewer))
 
 
 def test_lineage_cannot_be_rewired(store: Engine, world_ids: Ids) -> None:

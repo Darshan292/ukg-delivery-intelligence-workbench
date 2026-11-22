@@ -113,10 +113,17 @@ def has_supersession_cycle(r: Records) -> bool:
 
 
 def save_as_roles(r: Records, owner: Engine, ingest: Engine, review: Engine) -> None:
+    """Each table written by the role that owns it; lineage rows by the review role."""
+    plain = ("snapshots", "documents", "document_versions")
+    rest = tuple(f for f in ALL if f not in ("catalogues", "actors", "review_events", *plain))
     with owner.begin() as c:
         save(c, r, ("catalogues", "actors"))
     with ingest.begin() as c:
-        save(c, r, tuple(f for f in ALL if f not in ("catalogues", "actors", "review_events")))
+        save(c, r, plain, lineage=False)
+    with review.begin() as c:
+        save(c, r, ("document_versions",), lineage=True)
+    with ingest.begin() as c:
+        save(c, r, rest)
     with review.begin() as c:
         save(c, r, ("review_events",))
 

@@ -52,11 +52,18 @@ def test_privilege_matrix(store: Engine, role_urls: dict[str, URL]) -> None:
                 ):
                     got_col.add((group, t, col))
     want_tab = {(g, t, "SELECT") for g in roles for t in tables}
-    want_tab |= {("wb_ingest", t, "INSERT") for t in INGEST_INSERT}
+    want_tab |= {("wb_ingest", t, "INSERT") for t in INGEST_INSERT - {"document_version"}}
+    want_tab |= {("wb_review", "document_version", "INSERT")}
     assert got_tab == want_tab
     # column level: wb_ingest through its table grants, wb_review only the eight review columns
-    want_col = {("wb_ingest", t, col) for t, col in cols if t in INGEST_INSERT}
+    # wb_ingest cannot name supersedes_version_id: lineage is a human act (wb_review only)
+    want_col = {
+        ("wb_ingest", t, col)
+        for t, col in cols
+        if t in INGEST_INSERT and (t, col) != ("document_version", "supersedes_version_id")
+    }
     want_col |= {("wb_review", "review_event", col) for col in REVIEW_COLS}
+    want_col |= {("wb_review", t, col) for t, col in cols if t == "document_version"}
     assert got_col == want_col
 
 

@@ -188,8 +188,13 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'wb_review') THEN CREATE ROLE wb_review NOLOGIN; END IF;
 END $$;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO wb_ingest, wb_review;
-GRANT INSERT ON snapshot, document, document_version, evidence_locator, entity, entity_version,
+GRANT INSERT ON snapshot, document, evidence_locator, entity, entity_version,
   relationship, claim, unresolved_reference TO wb_ingest;
+-- Lineage is a human act: wb_ingest cannot name supersedes_version_id, so it cannot forge a
+-- lineage declaration by naming a human declarer. Only the review role may insert a lineage row.
+GRANT INSERT (id, document_id, sha256, snapshot_id, declared_by, uploaded_at)
+  ON document_version TO wb_ingest;
+GRANT INSERT ON document_version TO wb_review;
 -- no id, no at: the database alone assigns identity and time (ordering cannot be forged)
 GRANT INSERT (target_kind, claim_id, relationship_id, scope_snapshot_id, verdict, reason,
   successor_relationship_id, actor_id) ON review_event TO wb_review;

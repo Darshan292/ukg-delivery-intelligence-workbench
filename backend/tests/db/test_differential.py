@@ -61,7 +61,7 @@ def test_reingest_never_changes_verdicts(
             return [tuple(x) for x in c.execute(text("SELECT * FROM review_event ORDER BY id"))]
 
     before = events()
-    with ingest_engine.begin() as c:  # a new design version; the edge gets no claim in it
+    with review_engine.begin() as c:  # a new design version (lineage is a human act); no claim
         doc = c.scalar(
             text("SELECT document_id FROM document_version WHERE id = :d"),
             {"d": world_ids.design_dv},
