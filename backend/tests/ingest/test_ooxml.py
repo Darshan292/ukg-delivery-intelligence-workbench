@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 import re
 import zipfile
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pytest
@@ -194,20 +195,34 @@ def _names(data: bytes) -> list[str]:
         return zf.namelist()
 
 
-def _moved_sheet(sheet_xml: bytes, target: str = "sheets2/s.xml") -> bytes:
+def _moved_sheet(sheet_xml: bytes, target: str = "sheets2/s.xml", *, keep: bool = True) -> bytes:
+    part = "xl/" + target
     data = _wb()
     rels = _part(data, WB_RELS).replace(b"/xl/worksheets/sheet1.xml", target.encode())
     return rewrite_zip(
         data,
         replace={WB_RELS: rels},
         drop=["xl/worksheets/sheet1.xml"],
-        add={"xl/sheets2/s.xml": sheet_xml},
+        add={part: sheet_xml} if keep else {},
     )
 
 
-def test_merge_cap_applies_to_sheet_at_nonstandard_path() -> None:
-    data = _moved_sheet(_sheet_with_merge("A1:Z4000"))
+def test_merge_cap_applies_to_sheet_in_worksheets_subfolder() -> None:
+    data = _moved_sheet(_sheet_with_merge("A1:Z4000"), target="worksheets/sub/s.xml")
     _rejects(data, "sheet_too_large", Limits(max_merged_cells=1000))
+
+
+def test_sheet_outside_worksheets_folder_refused_before_openpyxl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.ingest.xlsx as xlsx_mod
+
+    called: list[int] = []
+    monkeypatch.setattr(xlsx_mod, "load_workbook", lambda *a, **k: called.append(1))  # type: ignore[arg-type]
+    data = _moved_sheet(_sheet_with_merge("A1:B2"))
+    with pytest.raises(IntakeRejected) as ei:
+        xlsx_mod.parse_xlsx(data, version_id=1, first_locator_id=1, now=datetime.now(UTC), limits=L)
+    assert ei.value.reason == "unsupported_part" and not called
 
 
 def test_relationship_target_outside_package() -> None:
@@ -216,7 +231,7 @@ def test_relationship_target_outside_package() -> None:
 
 
 def test_relationship_target_missing_part() -> None:
-    data = _moved_sheet(_sheet_with_merge("A1:B2"), target="nope/gone.xml")
+    data = _moved_sheet(_sheet_with_merge("A1:B2"), target="nope/gone.xml", keep=False)
     _rejects(data, "workbook_malformed")
 
 
@@ -287,3 +302,44 @@ def test_tree_part_byte_budget() -> None:
         "archive_too_large",
         Limits(xml_tree_max_bytes=1000),
     )
+
+
+def _sheets_xml(cells: str, dim: str = "") -> bytes:
+    body = f'{dim}<sheetData><row r="1">{cells}</row></sheetData>'
+    return f'<worksheet xmlns="{SS_NS}">{body}</worksheet>'.encode()
+
+
+def _wb_with_sheets(n: int, sheet_xml: bytes) -> bytes:
+    """n worksheets, all with the same hand-written XML, wired through workbook.xml.rels."""
+    data = _wb()
+    rels = _part(data, WB_RELS).decode()
+    add: dict[str, bytes] = {}
+    for k in range(2, n + 1):
+        add[f"xl/worksheets/sheet{k}.xml"] = sheet_xml
+        rels = rels.replace(
+            "</Relationships>",
+            f'<Relationship Id="rIdS{k}" Type="{REL_NS}/worksheet" '
+            f'Target="/xl/worksheets/sheet{k}.xml"/></Relationships>',
+        )
+    replace = {WB_RELS: rels.encode(), "xl/worksheets/sheet1.xml": sheet_xml}
+    return rewrite_zip(data, replace=replace, add=add)
+
+
+def test_workbook_wide_cell_cap() -> None:
+    sheet = _sheets_xml('<c r="A1"><v>1</v></c><c r="J60"><v>2</v></c>')  # 10 x 60 = 600 grid
+    data = _wb_with_sheets(3, sheet)
+    _rejects(data, "sheet_too_large", Limits(sheet_max_cells=1000, workbook_max_cells=1500))
+    assert "xl/workbook.xml" in inspect_xlsx_package(
+        data, Limits(sheet_max_cells=1000, workbook_max_cells=2000)
+    )
+
+
+def test_sparse_far_cell_rejected_by_cap_not_allocated() -> None:
+    sheet = _sheets_xml('<c r="A1"><v>1</v></c><c r="XFD1048576"><v>2</v></c>')
+    _rejects(rewrite_zip(_wb(), replace={"xl/worksheets/sheet1.xml": sheet}), "sheet_too_large")
+
+
+def test_declared_dimension_checked() -> None:
+    sheet = _sheets_xml("", '<dimension ref="A1:ZZ99999"/>')
+    data = rewrite_zip(_wb(), replace={"xl/worksheets/sheet1.xml": sheet})
+    _rejects(data, "sheet_too_large", Limits(sheet_max_cells=1000))

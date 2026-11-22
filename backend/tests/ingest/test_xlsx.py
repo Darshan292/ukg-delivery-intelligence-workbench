@@ -251,3 +251,19 @@ def test_profile_text_in_cells_is_just_text() -> None:
 
     assert _by_cell(workbook_bytes(build))["A1"][1].value_type == "string"
     assert "product_profile" not in CellFragment.model_fields
+
+
+def test_parse_does_not_iterate_the_grid(monkeypatch: pytest.MonkeyPatch) -> None:
+    from openpyxl.worksheet.worksheet import Worksheet
+
+    def boom(*a: object, **k: object) -> None:
+        raise AssertionError("iter_rows allocates the full row x column grid")
+
+    monkeypatch.setattr(Worksheet, "iter_rows", boom)
+
+    def build(wb: Workbook) -> None:
+        ws = wb.active
+        assert ws is not None
+        ws["A1"], ws["Z40"] = "a", "z"
+
+    assert set(_by_cell(workbook_bytes(build))) == {"A1", "Z40"}

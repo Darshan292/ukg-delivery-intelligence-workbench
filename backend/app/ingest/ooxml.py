@@ -7,6 +7,7 @@ Every refusal is a fixed reason code; no part name or content is ever put in an 
 
 import posixpath
 import zipfile
+from collections.abc import Mapping
 from io import BytesIO
 from xml.etree.ElementTree import Element  # noqa: S405  (type only; parsing is defusedxml)
 
@@ -123,21 +124,55 @@ def _targets(rels_name: str, root: Element, names: set[str]) -> list[tuple[str, 
     return out
 
 
-def _check_merges(refs: list[str], total: int, limits: Limits) -> int:
-    for ref in refs:
+class _SheetCaps:
+    """Per-sheet and workbook-wide caps, counted from the XML before openpyxl allocates."""
+
+    def __init__(self, limits: Limits, workbook_grid: int) -> None:
+        self.limits, self.workbook_grid = limits, workbook_grid
+        self.merged = 0
+        self.max_row = self.max_col = 0
+
+    def on_start(self, tag: str, attrib: Mapping[str, str]) -> None:
+        if tag == "mergeCell":
+            self._merge(attrib.get("ref", ""))
+        elif tag == "dimension":
+            self._grid(attrib.get("ref", ""))
+        elif tag == "c":
+            self._cell(attrib.get("r", ""))
+
+    def _bounds(self, ref: str) -> tuple[int, int, int, int]:
         try:
             c0, r0, c1, r1 = range_boundaries(ref)
         except (ValueError, TypeError):
             raise IntakeRejected("workbook_malformed") from None
-        if c0 is None or r0 is None or c1 is None or r1 is None:
-            raise IntakeRejected("workbook_malformed")  # whole-column refs are not merges
-        area = (c1 - c0 + 1) * (r1 - r0 + 1)
-        if area < 1:
-            raise IntakeRejected("workbook_malformed")
-        total += area
-        if total > limits.max_merged_cells:
+        if c0 is None or r0 is None or c1 is None or r1 is None or c1 < c0 or r1 < r0:
+            raise IntakeRejected("workbook_malformed")  # whole-column refs are not ranges
+        return c0, r0, c1, r1
+
+    def _merge(self, ref: str) -> None:
+        c0, r0, c1, r1 = self._bounds(ref)
+        self.merged += (c1 - c0 + 1) * (r1 - r0 + 1)
+        if self.merged > self.limits.max_merged_cells:
             raise IntakeRejected("sheet_too_large")
-    return total
+
+    def _grid(self, ref: str) -> None:
+        _, _, c1, r1 = self._bounds(ref)
+        self._extend(r1, c1)
+
+    def _cell(self, ref: str) -> None:
+        _, _, c1, r1 = self._bounds(ref)
+        self._extend(r1, c1)
+
+    def _extend(self, row: int, col: int) -> None:
+        self.max_row, self.max_col = max(self.max_row, row), max(self.max_col, col)
+        if self.max_row * self.max_col > self.limits.sheet_max_cells:
+            raise IntakeRejected("sheet_too_large")
+
+    def finish(self) -> int:
+        self.workbook_grid += self.max_row * self.max_col
+        if self.workbook_grid > self.limits.workbook_max_cells:
+            raise IntakeRejected("sheet_too_large")
+        return self.workbook_grid
 
 
 def inspect_xlsx_package(data: bytes, limits: Limits) -> dict[str, Element]:
@@ -187,16 +222,18 @@ def inspect_xlsx_package(data: bytes, limits: Limits) -> dict[str, Element]:
         wb_rels = posixpath.join(posixpath.dirname(wb), "_rels", posixpath.basename(wb) + ".rels")
         # worksheets are what the workbook's relationships say, not what a path pattern says
         sheets = {p for t, p in links.get(wb_rels, []) if t == "worksheet"}
-        merged = 0
+        if any(not p.startswith("xl/worksheets/") for p in sheets):
+            raise IntakeRejected("unsupported_part")  # before openpyxl can load it
+        grid = 0
         for n, info in files.items():
             if n in trees:
                 continue
-            is_sheet = n in sheets or (n.startswith("xl/worksheets/") and n.count("/") == 2)
-            refs = scan_xml(
+            caps = _SheetCaps(limits, grid) if n in sheets else None
+            scan_xml(
                 rd.read(info),
                 max_elements=limits.xml_max_elements,
                 max_depth=limits.xml_max_depth,
-                collect=("mergeCell", "ref") if is_sheet else None,
+                on_start=caps.on_start if caps else None,
             )
-            merged = _check_merges(refs, merged, limits)
+            grid = caps.finish() if caps else grid
     return trees

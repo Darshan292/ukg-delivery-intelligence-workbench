@@ -71,8 +71,6 @@ def _parse(
     next_id = first_locator_id
     for position, ws_f in enumerate(wb_f.worksheets):
         ws_v = wb_v[ws_f.title]
-        if ws_f.max_row * ws_f.max_column > limits.sheet_max_cells:
-            raise IntakeRejected("sheet_too_large")
         merges = sorted(str(r) for r in ws_f.merged_cells.ranges)
         anchors = {(r.min_row, r.min_col): str(r) for r in ws_f.merged_cells.ranges}
         hidden_rows = {i for i, d in ws_f.row_dimensions.items() if d.hidden}
@@ -85,46 +83,48 @@ def _parse(
                 merged_ranges=tuple(merges),
             )
         )
-        for row_f, row_v in zip(ws_f.iter_rows(), ws_v.iter_rows(), strict=True):
-            for c_f, c_v in zip(row_f, row_v, strict=True):
-                if isinstance(c_f, MergedCell):
-                    continue  # owner question S3-Q13 (pending): non-anchor merged cells not emitted
-                formula: str | None = None
-                if c_f.data_type == "f":
-                    raw = c_f.value
-                    if isinstance(raw, ArrayFormula):
-                        formula = raw.text
-                    elif isinstance(raw, str):
-                        formula = raw
-                    else:
-                        raise IntakeRejected("unsupported_cell")
-                value, vtype, snippet = _render(c_v.value, c_v.data_type)
-                if formula is None and vtype == "empty":
-                    continue
-                locs.append(
-                    XlsxCell(
-                        id=next_id,
-                        document_version_id=version_id,
-                        snippet=snippet,
-                        extractor=EXTRACTOR,
-                        extracted_at=now,
-                        kind="xlsx_cell",
-                        sheet=ws_f.title,
-                        cell=c_f.coordinate,
-                    )
+        # only cells that exist: iter_rows would allocate the whole row x column grid
+        cells_f, cells_v = ws_f._cells, ws_v._cells  # pyright: ignore[reportPrivateUsage]
+        for key in sorted(cells_f):
+            c_f, c_v = cells_f[key], cells_v.get(key, cells_f[key])
+            if isinstance(c_f, MergedCell):
+                continue  # owner question S3-Q13 (pending): non-anchor merged cells not emitted
+            formula: str | None = None
+            if c_f.data_type == "f":
+                raw = c_f.value
+                if isinstance(raw, ArrayFormula):
+                    formula = raw.text
+                elif isinstance(raw, str):
+                    formula = raw
+                else:
+                    raise IntakeRejected("unsupported_cell")
+            value, vtype, snippet = _render(c_v.value, c_v.data_type)
+            if formula is None and vtype == "empty":
+                continue
+            locs.append(
+                XlsxCell(
+                    id=next_id,
+                    document_version_id=version_id,
+                    snippet=snippet,
+                    extractor=EXTRACTOR,
+                    extracted_at=now,
+                    kind="xlsx_cell",
+                    sheet=ws_f.title,
+                    cell=c_f.coordinate,
                 )
-                cells.append(
-                    CellFragment(
-                        locator_id=next_id,
-                        formula=formula,
-                        value=value,
-                        value_type=vtype,
-                        row_hidden=c_f.row in hidden_rows,
-                        column_hidden=c_f.column in hidden_cols,
-                        merged_range=anchors.get((c_f.row, c_f.column)),
-                    )
+            )
+            cells.append(
+                CellFragment(
+                    locator_id=next_id,
+                    formula=formula,
+                    value=value,
+                    value_type=vtype,
+                    row_hidden=c_f.row in hidden_rows,
+                    column_hidden=c_f.column in hidden_cols,
+                    merged_range=anchors.get((c_f.row, c_f.column)),
                 )
-                next_id += 1
+            )
+            next_id += 1
     return tuple(locs), tuple(sheets), tuple(cells)
 
 

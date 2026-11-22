@@ -53,6 +53,7 @@ class Limits:
     zip_max_total_bytes: int = 50 * _MIB
     zip_max_ratio: int = 100
     sheet_max_cells: int = 1_000_000  # max_row x max_column grid
+    workbook_max_cells: int = 2_000_000  # sum of sheet grids across the workbook
     max_merged_cells: int = 100_000  # sum of merge areas
     xml_tree_max_bytes: int = 2 * _MIB  # parts parsed into a tree (content types, rels, workbook)
     xml_max_elements: int = 5_000_000  # streamed scan of every other XML part
