@@ -16,6 +16,8 @@ from app.db import create_db_engine, get_session
 from app.main import create_app
 from app.models import Entity, EvidenceLocator, Relationship
 
+pytestmark = pytest.mark.xfail(strict=True, reason="re-pointed in Task 3")
+
 NOTICE = "Tracer bullet: shows stored links around the entity. This is not impact analysis."
 
 

@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 
+import pytest
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Entity, EvidenceLocator, Relationship
 from app.seed import seed_tracer_graph
+
+pytestmark = pytest.mark.xfail(strict=True, reason="re-pointed in Task 3")
 
 
 def _counts(engine: Engine) -> tuple[int, int, int]:

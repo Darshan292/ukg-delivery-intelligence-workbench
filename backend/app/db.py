@@ -4,8 +4,10 @@
 
 from collections.abc import Iterator
 from functools import lru_cache
+from typing import cast
 
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -23,3 +25,9 @@ def _engine() -> Engine:
 def get_session() -> Iterator[Session]:
     with Session(_engine()) as session:
         yield session
+
+
+def sqlstate(exc: DBAPIError) -> str | None:
+    """SQLSTATE of a pg8000 server error (args[0] is the server's field dict)."""
+    fields = exc.orig.args[0] if exc.orig is not None and exc.orig.args else None
+    return cast("dict[str, str]", fields).get("C") if isinstance(fields, dict) else None
