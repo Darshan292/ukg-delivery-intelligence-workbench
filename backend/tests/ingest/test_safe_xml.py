@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
+from collections.abc import Callable
+
 import pytest
 
 from app.ingest.errors import IntakeRejected
@@ -72,7 +74,11 @@ BAD_ENCODING = f'<?xml version="1.0" encoding="{MARKER}"?><r/>'.encode()
 def test_unknown_encoding_is_xml_malformed_and_silent() -> None:
     from app.ingest.safe_xml import scan_xml
 
-    for call in (parse_xml, lambda b: scan_xml(b, max_elements=10, max_depth=10)):
+    def scan(b: bytes) -> object:
+        return scan_xml(b, max_elements=10, max_depth=10)
+
+    calls: list[Callable[[bytes], object]] = [parse_xml, scan]
+    for call in calls:
         with pytest.raises(IntakeRejected) as ei:
             call(BAD_ENCODING)
         exc = ei.value
