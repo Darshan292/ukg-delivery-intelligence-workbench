@@ -319,3 +319,57 @@ def conflicts(
     states = edge_states(r, s) if states is None else states
     found = _edge_conflicts(r, s, states) + _identity_conflicts(r, s, states)
     return tuple(sorted(found + _attribute_conflicts(r, s), key=_sort_key))
+
+
+Tier = Literal["established", "possible", "excluded"]
+_EDGE_LEVEL: frozenset[ConflictKind] = frozenset({"polarity", "cardinality", "documentary_only"})
+
+
+class EdgeView(EdgeState):
+    conflict_kinds: tuple[ConflictKind, ...]
+    tier: Tier
+
+
+class Evaluation(Record):
+    snapshot_id: Id
+    edges: tuple[EdgeView, ...]  # sorted by relationship id
+    conflicts: tuple[Conflict, ...]
+    clusters: tuple[Cluster, ...]
+
+    def edge(self, rel_id: int) -> EdgeView:
+        return next(e for e in self.edges if e.relationship_id == rel_id)
+
+
+def evaluate(r: Records, s: int) -> Evaluation:
+    states = edge_states(r, s)
+    found = conflicts(r, s, states)
+    views: list[EdgeView] = []
+    for rel_id in sorted(states):
+        st = states[rel_id]
+        kinds = {k for c in found for k in [c.kind] if rel_id in c.relationship_ids}
+        # an accepted conflicted edge stays established and is flagged (decision 0002, item 1)
+        if st.state == "accepted":
+            tier: Tier = "established"
+        elif st.state != "unreviewed":
+            tier = "excluded"
+        elif (
+            st.basis_strength == "explicit_source"
+            and not kinds & _EDGE_LEVEL
+            and r.relationship_by_id[rel_id].type != SAME_AS
+        ):
+            tier = "established"
+        else:
+            tier = "possible"
+        views.append(
+            EdgeView(
+                **st.model_dump(),
+                conflict_kinds=tuple(k for k in _KIND_ORDER if k in kinds),
+                tier=tier,
+            )
+        )
+    return Evaluation(
+        snapshot_id=s,
+        edges=tuple(views),
+        conflicts=found,
+        clusters=identity_clusters(r, s, states),
+    )
