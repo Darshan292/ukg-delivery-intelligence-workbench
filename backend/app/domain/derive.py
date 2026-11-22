@@ -7,7 +7,15 @@ Every output is a tuple sorted by a stated key (determinism, decision 0001 test 
 
 from typing import Literal
 
-from app.domain.model import BASIS_RANK, Basis, Claim, Id, Record, RelationshipReviewEvent
+from app.domain.model import (
+    BASIS_RANK,
+    Basis,
+    Claim,
+    Id,
+    Record,
+    RelationshipReviewEvent,
+    SortedIds0,
+)
 from app.domain.records import Records, is_scoped
 
 EffectiveState = Literal["accepted", "rejected", "superseded", "unreviewed", "unsupported"]
@@ -99,3 +107,102 @@ def edge_state(r: Records, rel_id: int, s: int) -> EdgeState:
         live_claim_ids=tuple(c.id for c in live),
         label=label,
     )
+
+
+ConflictKind = Literal["polarity", "cardinality", "documentary_only", "identity", "attribute"]
+_KIND_ORDER: tuple[ConflictKind, ...] = (
+    "polarity",
+    "cardinality",
+    "documentary_only",
+    "identity",
+    "attribute",
+)
+_COUNTS: frozenset[EffectiveState] = frozenset({"accepted", "unreviewed"})  # RM BC 16, 19, 25
+
+
+class Conflict(Record):
+    kind: ConflictKind
+    snapshot_id: Id
+    relationship_ids: SortedIds0 = ()
+    claim_ids: SortedIds0 = ()
+    entity_ids: SortedIds0 = ()
+    entity_version_ids: SortedIds0 = ()
+    attribute: str | None = None
+
+
+def edge_states(r: Records, s: int) -> dict[int, EdgeState]:
+    """Every relationship of the snapshot's profile, computed once."""
+    profile = r.snapshot_by_id[s].product_profile
+    return {
+        rel.id: edge_state(r, rel.id, s)
+        for rel in r.relationships
+        if r.relationship_profile(rel) == profile
+    }
+
+
+def _sort_key(c: Conflict) -> tuple[int, tuple[int, ...], tuple[int, ...], str]:
+    return (_KIND_ORDER.index(c.kind), c.relationship_ids, c.entity_ids, c.attribute or "")
+
+
+def _edge_conflicts(r: Records, s: int, states: dict[int, EdgeState]) -> list[Conflict]:
+    out: list[Conflict] = []
+    counting = {i: st for i, st in states.items() if st.state in _COUNTS}
+    cardinality: dict[tuple[int, str, str], list[int]] = {}
+    for rel_id in counting:
+        rel = r.relationship_by_id[rel_id]
+        live = live_claims(r, rel_id, s)
+        # owner question Q12 (pending): accepted edge with only absent claims = polarity
+        if any(c.polarity == "absent" for c in live):
+            out.append(
+                Conflict(
+                    kind="polarity",
+                    snapshot_id=s,
+                    relationship_ids=(rel_id,),
+                    claim_ids=tuple(c.id for c in live),
+                )
+            )
+        src = r.entity_by_id[rel.source_entity_id]
+        tgt = r.entity_by_id[rel.target_entity_id]
+        cat = r.catalogue_by_profile.get(r.snapshot_by_id[s].product_profile)
+        spec = (
+            next((t for t in cat.relationship_types if t.name == rel.type), None) if cat else None
+        )
+        if spec and (src.entity_type, tgt.entity_type) in spec.single_valued_for:
+            cardinality.setdefault((src.id, rel.type, tgt.entity_type), []).append(rel_id)
+        present = [c for c in live if c.polarity == "present"]
+        # owner question Q11 (pending): includes accepted edges (flag only, tier unchanged)
+        if (
+            is_scoped(r, rel)
+            and present
+            and all(c.scope_snapshot_id is None for c in present)
+            and any(c.basis == "explicit_source" for c in present)
+            and any(ev.snapshot_id == s for ev in r.entity_versions if ev.entity_id == src.id)
+        ):
+            out.append(
+                Conflict(
+                    kind="documentary_only",
+                    snapshot_id=s,
+                    relationship_ids=(rel_id,),
+                    claim_ids=tuple(c.id for c in present),
+                )
+            )
+    for ids in cardinality.values():
+        if len(ids) > 1:
+            # owner question Q13 (pending): counted on stored edges, not on same_as clusters
+            claim_ids = [c.id for i in ids for c in live_claims(r, i, s) if c.polarity == "present"]
+            out.append(
+                Conflict(
+                    kind="cardinality",
+                    snapshot_id=s,
+                    relationship_ids=tuple(sorted(ids)),
+                    claim_ids=tuple(sorted(claim_ids)),
+                )
+            )
+    return out
+
+
+def conflicts(
+    r: Records, s: int, states: dict[int, EdgeState] | None = None
+) -> tuple[Conflict, ...]:
+    states = edge_states(r, s) if states is None else states
+    return tuple(sorted(_edge_conflicts(r, s, states), key=_sort_key))
