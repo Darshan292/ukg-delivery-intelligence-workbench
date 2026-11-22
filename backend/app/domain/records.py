@@ -5,9 +5,9 @@
 Error messages name the rule, the record kind and the id only; never an input string.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from functools import cached_property
-from typing import Final, Self
+from typing import Any, Final, Self
 
 from pydantic import model_validator
 
@@ -122,6 +122,9 @@ class Records(Record):
         return frozenset(
             v.supersedes_version_id for v in self.document_versions if v.supersedes_version_id
         )
+
+    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Self:
+        raise TypeError("Records is append-only: use extended()")
 
     def extended(self, **more: tuple[object, ...]) -> Self:
         """Append records and re-validate everything (an in-place copy would skip the checks)."""

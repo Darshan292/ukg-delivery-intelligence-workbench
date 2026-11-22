@@ -198,3 +198,18 @@ def test_records_has_no_update_or_remove_api() -> None:
     )  # BaseModel ships a deprecated update_forward_refs
     names = {n for n in own if n.startswith(("remove", "delete", "update", "replace"))}
     assert names == set()
+
+
+def test_records_model_copy_raises_use_extended(fx: Fx) -> None:
+    r = fx.w.build()
+    with pytest.raises(TypeError, match="extended"):
+        r.model_copy(update={"claims": ()})
+
+
+def test_invalid_leaf_made_by_copy_is_rejected_in_records(fx: Fx) -> None:
+    bad = fx.claim.model_copy(
+        update={"locator_ids": fx.claim.locator_ids * 2}
+    )  # copy skips validation
+    fx.w.claims[-1] = bad
+    with pytest.raises(ValidationError):
+        fx.w.build()

@@ -19,7 +19,14 @@ from pydantic import (
 
 class Record(BaseModel):
     # hide_input_in_errors: untrusted strings must never be echoed in error text
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True, hide_input_in_errors=True)
+    # revalidate_instances: a leaf made by an unvalidated copy is re-checked inside Records
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        strict=True,
+        hide_input_in_errors=True,
+        revalidate_instances="always",
+    )
 
 
 Id = Annotated[int, Field(ge=1)]
