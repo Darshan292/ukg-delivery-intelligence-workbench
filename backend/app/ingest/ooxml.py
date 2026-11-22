@@ -5,10 +5,12 @@
 Every refusal is a fixed reason code; no part name or content is ever put in an error.
 """
 
+import importlib
 import posixpath
 import zipfile
 from collections.abc import Mapping
 from io import BytesIO
+from typing import Any
 from xml.etree.ElementTree import Element  # noqa: S405  (type only; parsing is defusedxml)
 
 from openpyxl.utils.cell import range_boundaries
@@ -16,6 +18,9 @@ from openpyxl.utils.cell import range_boundaries
 from app.ingest.errors import IntakeRejected, Limits, Reason
 from app.ingest.safe_xml import parse_xml, scan_xml
 
+# openpyxl's own workbook-part choice is the ground truth for what it will load
+_find_workbook_part: Any = importlib.import_module("openpyxl.reader.excel")._find_workbook_part
+_Manifest: Any = importlib.import_module("openpyxl.packaging.manifest").Manifest
 _CT = "[Content_Types].xml"
 _XLSX_MAIN = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
 _R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -24,6 +29,10 @@ _SS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
 def _check_name(raw: str) -> None:
     if not raw or raw.startswith("/") or any(c in raw for c in "\\:\x00") or ".." in raw.split("/"):
+        raise IntakeRejected("archive_bad_entry_name")
+    # verbatim names only: openpyxl uses part names un-normalised, so "a//b" or "./a" would
+    # make it open a different part from the one the scanner resolved
+    if raw.rstrip("/") != posixpath.normpath(raw.rstrip("/")):
         raise IntakeRejected("archive_bad_entry_name")
 
 
@@ -98,16 +107,18 @@ def _check_content_types(root: Element) -> str:
         for needle, reason in _CT_REFUSED:
             if needle in t.lower():
                 raise IntakeRejected(reason)
-    mains = [
-        e.get("PartName", "")
-        for e in root
-        if e.tag.endswith("Override") and e.get("ContentType") == _XLSX_MAIN
-    ]
-    if not mains:
-        raise IntakeRejected("unsupported_type")
-    if len(mains) > 1:
+    if any(e.tag.endswith("Override") and not e.get("PartName", "").startswith("/") for e in root):
         raise IntakeRejected("package_inconsistent")
-    return posixpath.normpath(mains[0].lstrip("/"))
+    try:
+        # openpyxl's own choice (XLTM, XLTX, XLSM, XLSX order) is the ground truth
+        part: Any = _find_workbook_part(_Manifest.from_tree(root))
+    except OSError:
+        raise IntakeRejected("unsupported_type") from None
+    except Exception:
+        raise IntakeRejected("workbook_malformed") from None
+    if part.ContentType != _XLSX_MAIN:
+        raise IntakeRejected("unsupported_type")
+    return str(part.PartName)[1:]  # exactly what openpyxl opens
 
 
 def _targets(rels_name: str, root: Element, names: set[str]) -> list[tuple[str, str, str]]:
@@ -178,6 +189,13 @@ class _SheetCaps:
                 or self.totals.cells > self.limits.workbook_max_cells
             ):
                 raise IntakeRejected("sheet_too_large")
+            self._extend(r1, c1)
+        elif tag == "comment":
+            # openpyxl does ws[ref] for each comment, creating every cell of a range
+            ref = attrib.get("ref", "")
+            if ":" in ref:
+                raise IntakeRejected("workbook_malformed")  # a comment anchors one cell
+            _, _, c1, r1 = self._bounds(ref)
             self._extend(r1, c1)
         elif tag in ("dimension", "c"):
             _, _, c1, r1 = self._bounds(attrib.get("ref" if tag == "dimension" else "r", ""))
@@ -261,7 +279,9 @@ def inspect_xlsx_package(data: bytes, limits: Limits) -> dict[str, Element]:
                 sheets[by_id[rid][1]] = by_id[rid][0]
         for path, rtype in sheets.items():
             # chartsheets are refused later (S3-Q13); everything else must sit in the sheet folder
-            if path in trees or (rtype != "chartsheet" and not path.startswith("xl/worksheets/")):
+            if path in trees or (
+                "chartsheet" not in rtype and not path.startswith("xl/worksheets/")
+            ):
                 raise IntakeRejected("unsupported_part")  # before openpyxl can load it
         totals = _Totals()
         for n, info in files.items():

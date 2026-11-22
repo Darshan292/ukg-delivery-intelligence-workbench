@@ -142,7 +142,7 @@ def parse_xlsx(
 ) -> tuple[tuple[XlsxCell, ...], tuple[SheetFragment, ...], tuple[CellFragment, ...]]:
     parts = inspect_xlsx_package(data, limits)
     if any(
-        e.get("Type", "").endswith("/chartsheet")
+        "chartsheet" in e.get("Type", "")
         for n, root in parts.items()
         if n.endswith(".rels")
         for e in root

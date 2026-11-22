@@ -425,3 +425,58 @@ def test_duplicate_id_shared_with_an_external_hyperlink_rejected() -> None:
         ' Target="https://example.invalid/" TargetMode="External"/>'
     )
     _rejects(_with_rel(dup), "package_inconsistent")
+
+
+# --- architect review: scanner and openpyxl must agree on the workbook part and the cells ---
+
+
+def test_override_partname_without_leading_slash_rejected() -> None:
+    data = _wb()
+    ct = _content_types(data).replace(b'PartName="/xl/workbook.xml"', b'PartName="xl/workbook.xml"')
+    _rejects(rewrite_zip(data, replace={"[Content_Types].xml": ct}), "package_inconsistent")
+
+
+def test_template_override_beats_xlsx_override_in_openpyxl() -> None:
+    # openpyxl searches XLTM, XLTX, XLSM, XLSX in that order: this Override would win
+    data = _wb()
+    ct = _content_types(data).replace(
+        b"</Types>",
+        b'<Override PartName="/xl/evil.xml" ContentType="application/vnd.openxmlformats-'
+        b'officedocument.spreadsheetml.template.main+xml"/></Types>',
+    )
+    evil = _part(data, "xl/workbook.xml")
+    _rejects(
+        rewrite_zip(data, replace={"[Content_Types].xml": ct}, add={"xl/evil.xml": evil}),
+        "unsupported_type",  # the template Override wins, and templates are refused
+    )
+
+
+@pytest.mark.parametrize("name", ["xl//x.xml", "xl/./x.xml", "./x.xml", "xl/x.xml/."])
+def test_non_normalised_entry_names_rejected(name: str) -> None:
+    _rejects(rewrite_zip(_wb(), add={name: b"<a/>"}), "archive_bad_entry_name")
+
+
+def test_comment_range_ref_rejected_before_load() -> None:
+    com = (
+        f'<comments xmlns="{SS_NS}"><authors><author>a</author></authors><commentList>'
+        '<comment ref="A1:Z200000" authorId="0"><text><t>x</t></text></comment>'
+        "</commentList></comments>"
+    ).encode()
+    rels = (
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        f'<Relationship Id="rIdc" Type="{REL_NS}/comments" Target="../comments1.xml"/>'
+        "</Relationships>"
+    ).encode()
+    data = rewrite_zip(
+        _wb(), add={"xl/comments1.xml": com, "xl/worksheets/_rels/sheet1.xml.rels": rels}
+    )
+    _rejects(data, "workbook_malformed")
+
+
+def test_comment_single_cell_counts_toward_grid() -> None:
+    com = (
+        f'<comments xmlns="{SS_NS}"><authors><author>a</author></authors><commentList>'
+        '<comment ref="XFD1048576" authorId="0"><text><t>x</t></text></comment>'
+        "</commentList></comments>"
+    ).encode()
+    _rejects(rewrite_zip(_wb(), add={"xl/comments1.xml": com}), "sheet_too_large")
