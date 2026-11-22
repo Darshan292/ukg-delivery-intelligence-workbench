@@ -179,7 +179,13 @@ def _edge_conflicts(r: Records, s: int, states: dict[int, EdgeState]) -> list[Co
             and present
             and all(c.scope_snapshot_id is None for c in present)
             and any(c.basis == "explicit_source" for c in present)
-            and any(ev.snapshot_id == s for ev in r.entity_versions if ev.entity_id == src.id)
+            # shortcut: scans all entity versions per edge, O(R*EV); index by (entity, snapshot)
+            # when Slice 6 needs it
+            and any(
+                ev.snapshot_id == s and ev.document_version_id not in r.superseded_version_ids
+                for ev in r.entity_versions
+                if ev.entity_id == src.id
+            )
         ):
             out.append(
                 Conflict(

@@ -146,3 +146,18 @@ def test_conflicts_sorted_and_deterministic(fx: Fx) -> None:
         "documentary_only",
     ]
     assert first == conflicts(r, fx.s1.id)
+
+
+def test_documentary_only_ignores_superseded_export_versions(fx: Fx) -> None:
+    fx.w.claim(fx.ab, fx.d)
+    fx.w.version(fx.a, fx.e1, x=1)
+    assert fx.kinds() == ["documentary_only"]  # v1 not superseded: conflict
+    fx.w.new_version(fx.e1)  # v2 supersedes v1 and has no EntityVersion for A
+    assert fx.kinds() == []
+
+
+def test_unscoped_relationship_never_gets_documentary_only(fx: Fx) -> None:
+    impl = fx.w.rel("implements", fx.a, fx.q)
+    fx.w.claim(impl, fx.d)
+    fx.w.version(fx.a, fx.e1, x=1)
+    assert fx.kinds() == []
