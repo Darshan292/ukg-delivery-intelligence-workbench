@@ -3,6 +3,7 @@
 import datetime as dt
 from decimal import Decimal
 from io import BytesIO
+from typing import Any
 
 import pytest
 from openpyxl import Workbook, load_workbook
@@ -267,3 +268,29 @@ def test_parse_does_not_iterate_the_grid(monkeypatch: pytest.MonkeyPatch) -> Non
         ws["A1"], ws["Z40"] = "a", "z"
 
     assert set(_by_cell(workbook_bytes(build))) == {"A1", "Z40"}
+
+
+def test_post_load_check_is_independent_of_the_prescan(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.ingest.xlsx as xlsx_mod
+
+    def noop(data: bytes, limits: Limits) -> dict[str, Any]:
+        return {}
+
+    monkeypatch.setattr(xlsx_mod, "inspect_xlsx_package", noop)
+
+    def grid(wb: Workbook) -> None:
+        ws = wb.active
+        assert ws is not None
+        ws["A1"], ws["Z200"] = 1, 2
+
+    _rejects(workbook_bytes(grid), "sheet_too_large", Limits(sheet_max_cells=1000))
+
+    def many(wb: Workbook) -> None:
+        for i in range(3):
+            ws = wb.active if i == 0 else wb.create_sheet()
+            assert ws is not None
+            ws["A1"], ws["B1"], ws["A2"], ws["B2"] = 1, 2, 3, 4
+
+    _rejects(
+        workbook_bytes(many), "sheet_too_large", Limits(sheet_max_cells=1000, workbook_max_cells=10)
+    )

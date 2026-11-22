@@ -343,3 +343,50 @@ def test_declared_dimension_checked() -> None:
     sheet = _sheets_xml("", '<dimension ref="A1:ZZ99999"/>')
     data = rewrite_zip(_wb(), replace={"xl/worksheets/sheet1.xml": sheet})
     _rejects(data, "sheet_too_large", Limits(sheet_max_cells=1000))
+
+
+def test_mislabelled_relationship_type_still_capped() -> None:
+    data = _wb()
+    rels = _part(data, WB_RELS).replace(b'relationships/worksheet"', b'relationships/theme"')
+    data = rewrite_zip(
+        data,
+        replace={WB_RELS: rels, "xl/worksheets/sheet1.xml": _sheet_with_merge("A1:Z4000")},
+    )
+    _rejects(data, "sheet_too_large", Limits(max_merged_cells=1000))
+
+
+def test_workbook_override_must_match_office_document_target() -> None:
+    data = _wb()
+    ct = _content_types(data).replace(b'PartName="/xl/workbook.xml"', b'PartName="/xl/other.xml"')
+    data = rewrite_zip(data, replace={"[Content_Types].xml": ct}, add={"xl/other.xml": b"<a/>"})
+    _rejects(data, "package_inconsistent")
+
+
+def test_dangling_sheet_rid() -> None:
+    data = _wb()
+    wbx = _part(data, "xl/workbook.xml").replace(b'r:id="rId1"', b'r:id="rId77"')
+    _rejects(rewrite_zip(data, replace={"xl/workbook.xml": wbx}), "workbook_malformed")
+
+
+def test_caps_apply_to_any_xml_part_whatever_its_name() -> None:
+    data = rewrite_zip(_wb(), add={"xl/misc/x.xml": _sheet_with_merge("A1:Z4000")})
+    _rejects(data, "sheet_too_large", Limits(max_merged_cells=1000))
+
+
+def test_merge_cap_is_workbook_wide() -> None:
+    data = _wb_with_sheets(3, _sheet_with_merge("A1:J10"))  # 3 x 100 merged cells
+    _rejects(data, "sheet_too_large", Limits(max_merged_cells=250))
+    assert "xl/workbook.xml" in inspect_xlsx_package(data, Limits(max_merged_cells=400))
+
+
+def test_merge_extent_counts_toward_grid() -> None:
+    data = rewrite_zip(_wb(), replace={"xl/worksheets/sheet1.xml": _sheet_with_merge("A1:Z200")})
+    _rejects(data, "sheet_too_large", Limits(sheet_max_cells=1000))
+
+
+def test_hyperlink_range_counts_as_cells() -> None:
+    sheet = (
+        f'<worksheet xmlns="{SS_NS}"><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>'
+        '<hyperlinks><hyperlink ref="A1:XFD1048576" display="x"/></hyperlinks></worksheet>'
+    ).encode()
+    _rejects(rewrite_zip(_wb(), replace={"xl/worksheets/sheet1.xml": sheet}), "sheet_too_large")

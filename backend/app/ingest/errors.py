@@ -32,6 +32,7 @@ Reason = Literal[
     "pdf_resource_limit",
     "pdf_malformed",
     "pdf_worker_failed",
+    "package_inconsistent",
     "records_invalid",
 ]
 

@@ -69,8 +69,17 @@ def _parse(
     sheets: list[SheetFragment] = []
     cells: list[CellFragment] = []
     next_id = first_locator_id
+    loaded_cells = 0
     for position, ws_f in enumerate(wb_f.worksheets):
         ws_v = wb_v[ws_f.title]
+        # defence in depth: the pre-load scan should already have refused all of this
+        loaded_cells += len(ws_f._cells)  # pyright: ignore[reportPrivateUsage]
+        if (
+            ws_f.max_row * ws_f.max_column > limits.sheet_max_cells
+            or len(ws_f._cells) > limits.sheet_max_cells  # pyright: ignore[reportPrivateUsage]
+            or loaded_cells > limits.workbook_max_cells
+        ):
+            raise IntakeRejected("sheet_too_large")
         merges = sorted(str(r) for r in ws_f.merged_cells.ranges)
         anchors = {(r.min_row, r.min_col): str(r) for r in ws_f.merged_cells.ranges}
         hidden_rows = {i for i, d in ws_f.row_dimensions.items() if d.hidden}
