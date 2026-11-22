@@ -49,7 +49,7 @@ Whether the product is a "competitive product" is for independent legal review (
 ## Decision autonomy (standing rule from 2026-11-21)
 
 1. Decide anything reversible yourself: code structure, library choice within the licence gate, test design, wording, doc fixes. Record the choice in the PR description. Do not ask.
-2. Escalate only: legal or licence questions; anything that cannot be undone (history rewrites, deletions, publishing); changes to approved D-decisions; anything that changes expected oracle results.
+2. Escalate only: legal or licence questions (licence scope below); anything that cannot be undone (history rewrites, deletions, publishing); changes to approved D-decisions; anything that changes expected oracle results.
 3. Batch escalations: at most one question list per report, each item with a recommended answer. If the owner does not reply within 24 hours, the recommendation stands and is marked "defaulted".
 4. No new planning or analysis documents during Step 1. An ambiguity found while coding goes into a GitHub issue labelled `decision`, and building continues.
 5. Every report starts with links to the merged commits. A report without them counts as no progress.
@@ -84,4 +84,8 @@ SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 ```
 
-in the file's comment syntax. Markdown and data fixtures are exempt. Every dependency must pass the licence gate: MIT, BSD, Apache-2.0, ISC, PSF and MPL-2.0 are allowed, and LGPL is allowed for dev-only use. GPL, AGPL, SSPL, BSL and non-commercial licences are rejected. No paid services, no real data, and no claims that haven't been measured.
+in the file's comment syntax. Markdown and data fixtures are exempt. Every dependency must pass the licence gate: MIT, BSD, Apache-2.0, ISC, PSF and MPL-2.0 are allowed, and LGPL is allowed for dev-only use. GPL, AGPL, SSPL, BSL and non-commercial licences are rejected. Owner-approved exceptions live in `licence-exceptions.toml` (exact names, version ranges).
+
+Licence rule (owner, 2026-11-21): add any OSI-approved permissive licence (MIT, BSD, Apache, ISC, BlueOak, Zlib, CC0 and similar) to the gate's allow list yourself and note it in the PR; add new versions or platforms of an already approved package family yourself. Escalate only copyleft (GPL/AGPL, or LGPL at runtime), non-OSI, "non-commercial", or a brand-new package family. Before asking any licence question, run the gate against every lockfile (`--npm-lock` covers all platforms) and send all failures in one list.
+
+No paid services, no real data, and no claims that haven't been measured.
