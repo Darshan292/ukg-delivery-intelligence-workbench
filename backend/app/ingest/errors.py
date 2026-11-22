@@ -54,6 +54,9 @@ class Limits:
     zip_max_ratio: int = 100
     sheet_max_cells: int = 1_000_000  # max_row x max_column grid
     max_merged_cells: int = 100_000  # sum of merge areas
+    xml_tree_max_bytes: int = 2 * _MIB  # parts parsed into a tree (content types, rels, workbook)
+    xml_max_elements: int = 5_000_000  # streamed scan of every other XML part
+    xml_max_depth: int = 100
     pdf_max_pages: int = 500
     pdf_max_objects: int = 100_000
     pdf_page_seconds: float = 5

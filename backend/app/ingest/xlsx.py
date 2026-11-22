@@ -132,7 +132,12 @@ def parse_xlsx(
     data: bytes, *, version_id: int, first_locator_id: int, now: datetime, limits: Limits
 ) -> tuple[tuple[XlsxCell, ...], tuple[SheetFragment, ...], tuple[CellFragment, ...]]:
     parts = inspect_xlsx_package(data, limits)
-    if any(n.startswith("xl/chartsheets/") for n in parts):
+    if any(
+        e.get("Type", "").endswith("/chartsheet")
+        for n, root in parts.items()
+        if n.endswith(".rels")
+        for e in root
+    ):
         # owner question S3-Q13 (pending): chartsheets are refused (checked here: openpyxl
         # itself raises on an empty one)
         raise IntakeRejected("unsupported_cell")

@@ -5,14 +5,15 @@
 Every refusal is a fixed reason code; no part name or content is ever put in an error.
 """
 
+import posixpath
 import zipfile
 from io import BytesIO
 from xml.etree.ElementTree import Element  # noqa: S405  (type only; parsing is defusedxml)
 
 from openpyxl.utils.cell import range_boundaries
 
-from app.ingest.errors import IntakeRejected, Limits
-from app.ingest.safe_xml import parse_xml
+from app.ingest.errors import IntakeRejected, Limits, Reason
+from app.ingest.safe_xml import parse_xml, scan_xml
 
 _CT = "[Content_Types].xml"
 _XLSX_MAIN = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
@@ -37,53 +38,110 @@ def _refuse_named(name: str) -> None:
         raise IntakeRejected("unsupported_part")
 
 
-def _read_all(
-    zf: zipfile.ZipFile, infos: list[zipfile.ZipInfo], limits: Limits
-) -> dict[str, bytes]:
-    out: dict[str, bytes] = {}
-    budget = limits.zip_max_total_bytes
-    for info in infos:
+class _Reader:
+    """Streams entries, counting the bytes actually inflated (headers can lie)."""
+
+    def __init__(self, zf: zipfile.ZipFile, limits: Limits, data_len: int) -> None:
+        self.zf, self.limits, self.total = zf, limits, 0
+        self.compressed = max(1, min(data_len, sum(i.compress_size for i in zf.infolist())))
+
+    def read(self, info: zipfile.ZipInfo, cap: int | None = None) -> bytes:
+        chunks: list[bytes] = []
+        n = 0
         try:
-            # bounded read: the size in the header is attacker-controlled, the bytes are not
-            body = zf.open(info).read(budget + 1)
+            with self.zf.open(info) as f:
+                while chunk := f.read(65536):
+                    n += len(chunk)
+                    self.total += len(chunk)
+                    if self.total > self.limits.zip_max_total_bytes or (
+                        cap is not None and n > cap
+                    ):
+                        raise IntakeRejected("archive_too_large")
+                    if self.total > self.limits.zip_max_ratio * self.compressed:
+                        raise IntakeRejected("archive_ratio")
+                    chunks.append(chunk)
+        except IntakeRejected:
+            raise
         except Exception:  # BadZipFile (CRC), zlib.error, RuntimeError, ...: all one reason
             raise IntakeRejected("archive_malformed") from None
-        budget -= len(body)
-        if budget < 0:
-            raise IntakeRejected("archive_too_large")
-        out[info.filename] = body
-    return out
+        return b"".join(chunks)
+
+
+# relationship Type (last URI segment, lower case) -> reason; matched on the type, never the name
+_REL_REFUSED: dict[str, Reason] = {
+    "externallink": "external_link",
+    "externallinkpath": "external_link",
+    "connections": "external_link",
+    "oleobject": "embedded_object",
+    "package": "embedded_object",
+    "activexcontrol": "embedded_object",
+    "activexcontrolbinary": "embedded_object",
+    "vbaproject": "macro",
+}
+# content-type substring (lower case) -> reason
+_CT_REFUSED: tuple[tuple[str, Reason], ...] = (
+    ("macroenabled", "macro"),
+    ("vbaproject", "macro"),
+    ("externallink", "external_link"),
+    ("spreadsheetml.connections", "external_link"),
+    ("oleobject", "embedded_object"),
+    ("activex", "embedded_object"),
+)
 
 
 def _check_content_types(root: Element) -> None:
     types = [e.get("ContentType", "") for e in root if e.tag.endswith(("Override", "Default"))]
-    if any("macroenabled" in t.lower() or "vbaproject" in t.lower() for t in types):
-        raise IntakeRejected("macro")
+    for t in types:
+        for needle, reason in _CT_REFUSED:
+            if needle in t.lower():
+                raise IntakeRejected(reason)
     if _XLSX_MAIN not in types:
         raise IntakeRejected("unsupported_type")
 
 
-def _check_merges(parts: dict[str, Element], limits: Limits) -> None:
-    total = 0
-    for name, root in parts.items():
-        if not (name.startswith("xl/worksheets/") and name.count("/") == 2):
+def _targets(rels_name: str, root: Element, names: set[str]) -> list[tuple[str, str]]:
+    """Check one .rels part; return (type, resolved part name) of its internal relationships."""
+    base = posixpath.dirname(posixpath.dirname(rels_name))  # the source part's folder
+    out: list[tuple[str, str]] = []
+    for rel in root:
+        if not rel.tag.endswith("Relationship"):
             continue
-        for m in root.iter(f"{_SS}mergeCell"):
-            try:
-                c0, r0, c1, r1 = range_boundaries(m.get("ref", ""))
-            except (ValueError, TypeError):
-                raise IntakeRejected("workbook_malformed") from None
-            if c0 is None or r0 is None or c1 is None or r1 is None:
-                raise IntakeRejected("workbook_malformed")  # whole-column refs are not merges
-            area = (c1 - c0 + 1) * (r1 - r0 + 1)
-            if area < 1:
-                raise IntakeRejected("workbook_malformed")
-            total += area
-            if total > limits.max_merged_cells:
-                raise IntakeRejected("sheet_too_large")
+        rtype = rel.get("Type", "").rsplit("/", 1)[-1].lower()
+        if rtype in _REL_REFUSED:
+            raise IntakeRejected(_REL_REFUSED[rtype])
+        if rel.get("TargetMode") == "External":
+            if rtype != "hyperlink":
+                raise IntakeRejected("external_link")
+            continue
+        t = rel.get("Target", "").split("#")[0]
+        path = posixpath.normpath(t[1:] if t.startswith("/") else posixpath.join(base, t))
+        if not t or path == ".." or path.startswith("../"):
+            raise IntakeRejected("archive_bad_entry_name")
+        if path not in names:
+            raise IntakeRejected("workbook_malformed")
+        out.append((rtype, path))
+    return out
+
+
+def _check_merges(refs: list[str], total: int, limits: Limits) -> int:
+    for ref in refs:
+        try:
+            c0, r0, c1, r1 = range_boundaries(ref)
+        except (ValueError, TypeError):
+            raise IntakeRejected("workbook_malformed") from None
+        if c0 is None or r0 is None or c1 is None or r1 is None:
+            raise IntakeRejected("workbook_malformed")  # whole-column refs are not merges
+        area = (c1 - c0 + 1) * (r1 - r0 + 1)
+        if area < 1:
+            raise IntakeRejected("workbook_malformed")
+        total += area
+        if total > limits.max_merged_cells:
+            raise IntakeRejected("sheet_too_large")
+    return total
 
 
 def inspect_xlsx_package(data: bytes, limits: Limits) -> dict[str, Element]:
+    """Returns only the small parts that are tree-parsed: content types, .rels, the workbook."""
     try:
         zf = zipfile.ZipFile(BytesIO(data))
     except Exception:  # BadZipFile, ValueError, OSError, ...
@@ -99,18 +157,46 @@ def inspect_xlsx_package(data: bytes, limits: Limits) -> dict[str, Element]:
             raise IntakeRejected("archive_bad_entry_name")
         if any(i.flag_bits & 0x1 for i in infos):
             raise IntakeRejected("archive_encrypted")
-        files = [i for i in infos if not i.is_dir()]
-        for i in files:
-            _refuse_named(i.orig_filename)
-        declared = sum(i.file_size for i in files)
+        files = {i.orig_filename: i for i in infos if not i.is_dir()}
+        for n in files:
+            _refuse_named(n)
+        declared = sum(i.file_size for i in files.values())
         if declared > limits.zip_max_total_bytes:
             raise IntakeRejected("archive_too_large")
-        if declared / max(1, sum(i.compress_size for i in files)) > limits.zip_max_ratio:
+        if declared / max(1, sum(i.compress_size for i in files.values())) > limits.zip_max_ratio:
             raise IntakeRejected("archive_ratio")
-        raw = _read_all(zf, files, limits)
-    parts = {name: parse_xml(body) for name, body in raw.items()}
-    if _CT not in parts:
-        raise IntakeRejected("archive_malformed")
-    _check_content_types(parts[_CT])
-    _check_merges(parts, limits)
-    return parts
+        rd = _Reader(zf, limits, len(data))
+
+        def tree(name: str) -> Element:
+            return parse_xml(rd.read(files[name], limits.xml_tree_max_bytes))
+
+        if _CT not in files:
+            raise IntakeRejected("archive_malformed")
+        trees = {_CT: tree(_CT)}
+        _check_content_types(trees[_CT])
+        known = set(files)
+        links: dict[str, list[tuple[str, str]]] = {}
+        for n in files:
+            if n.endswith(".rels"):
+                trees[n] = tree(n)
+                links[n] = _targets(n, trees[n], known)
+        wb = next((p for t, p in links.get("_rels/.rels", []) if t == "officedocument"), None)
+        if wb is None:
+            raise IntakeRejected("workbook_malformed")
+        trees[wb] = tree(wb)
+        wb_rels = posixpath.join(posixpath.dirname(wb), "_rels", posixpath.basename(wb) + ".rels")
+        # worksheets are what the workbook's relationships say, not what a path pattern says
+        sheets = {p for t, p in links.get(wb_rels, []) if t == "worksheet"}
+        merged = 0
+        for n, info in files.items():
+            if n in trees:
+                continue
+            is_sheet = n in sheets or (n.startswith("xl/worksheets/") and n.count("/") == 2)
+            refs = scan_xml(
+                rd.read(info),
+                max_elements=limits.xml_max_elements,
+                max_depth=limits.xml_max_depth,
+                collect=("mergeCell", "ref") if is_sheet else None,
+            )
+            merged = _check_merges(refs, merged, limits)
+    return trees
