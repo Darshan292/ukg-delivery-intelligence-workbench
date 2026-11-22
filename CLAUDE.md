@@ -2,7 +2,7 @@
 
 An evidence-first engineering intelligence platform for UKG implementation, migration and support engineers. It helps them understand configurations, dependencies, changes and their delivery impact. Every fact it shows must trace back to a source.
 
-Status: research done; no application code yet. Read before building: `docs/plans/milestone-1.md` (revision 2), `docs/decisions-for-approval.md` (open decisions), `docs/risk-register.md`, `docs/research/research-report.md`.
+Status: Step 1 (Slice 0 and the tracer bullet) and Slice 1 (domain model) are merged; work proceeds slice by slice through the milestone gates below. Read before building: `docs/plans/milestone-1.md` (revision 2), `docs/decisions-for-approval.md` (open decisions), `docs/risk-register.md`, `docs/research/research-report.md`.
 
 ## Architecture direction
 
@@ -44,18 +44,24 @@ Whether the product is a "competitive product" is for independent legal review (
 - Solution size: ponytail. When the two pull different ways, superpowers decides the process and the tests; ponytail decides how much code. Ponytail never removes tests, validation, provenance or security.
 - Docs: use Context7 for current framework docs when it is connected; otherwise read the official docs and note the version checked.
 - Frontend tasks use `frontend-design`; `security-guidance` applies everywhere.
-- Branching (Dev Team Directive 01, rule 3): work happens on a feature branch, which is committed and pushed at least daily; changes reach `main` only through a reviewed pull request. Never push directly to `main` and never rewrite history without asking.
-- No new planning documents until Step 1 (Slice 0 plus the tracer bullet) ships. A design question that blocks code gets a decision record of at most one page.
+- Branching (Dev Team Directive 01, rule 3): work happens on a feature branch, which is committed and pushed after every completed task; changes reach `main` only through a reviewed pull request. Never push directly to `main` and never rewrite history without asking.
+- Each slice gets one implementation plan (superpowers `writing-plans`) before it is built. A design question that blocks code gets a decision record of at most one page.
 
 ## Decision autonomy (standing rule from 2026-11-21)
 
 1. Decide anything reversible yourself: code structure, library choice within the licence gate, test design, wording, doc fixes. Record the choice in the PR description. Do not ask.
 2. Escalate only: legal or licence questions (licence scope below); anything that cannot be undone (history rewrites, deletions, publishing); changes to approved D-decisions; anything that changes expected oracle results.
-3. Batch escalations: at most one question list per report, each item with a recommended answer. If the owner does not reply within 24 hours, the recommendation stands and is marked "defaulted".
-4. No new planning or analysis documents during Step 1. An ambiguity found while coding goes into a GitHub issue labelled `decision`, and building continues.
+3. Batch escalations: at most one question list per report, each item with a recommended answer. If the owner does not reply within 24 hours of posting, the recommendation stands and is marked "defaulted", **except protected items** (anything touching the oracle, licences, legal questions or Git history), which wait for the owner.
+4. An ambiguity found while coding goes into a GitHub issue labelled `decision`, and building continues.
 5. Every report starts with links to the merged commits. A report without them counts as no progress.
 
-Step 1 reports are due on days 3, 6 and 10: 2026-11-23, 2026-11-26 and 2026-11-30 (calendar days; Day 1 is 2026-11-21).
+## Milestone gates and reports (owner decision 2026-11-22 (3))
+
+Work is driven by milestone gates, not by the calendar: no day-based schedules, timeboxes or due dates.
+
+- **Order of work** is the dependency order of the slices in `docs/plans/milestone-1.md`. When a slice is merged with green CI and its acceptance criteria are met, start the next unblocked slice at once. Never start a slice whose gate is not met; work on another unblocked slice instead.
+- **Gates:** Slice 2b and Slice 6 need the oracle frozen by the owner. Slice 4 needs Slice 3 merged. Slice 7 needs Slice 6 merged **and** the owner's confirmation that 5 practitioner interviews are done. Slice 8 needs Slice 6 merged. Gate G-REAL (any real data) is unchanged.
+- **Reports:** one per merged slice, plus one immediately when all remaining work is blocked. Each is a comment on the pinned GitHub issue "Status reports" and contains: links to the merged commits, the acceptance criteria met, the mutations or failure cases its tests catch, the next slice started, and at most one batched question list with recommendations.
 
 ## Delegating by complexity
 

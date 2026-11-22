@@ -1,6 +1,6 @@
 # Milestone 1: synthetic evidence-to-impact slice (proposal, revision 2)
 
-Status: approved 2026-11-20 (D6), not started (`docs/decisions-for-approval.md`). Each slice becomes its own superpowers `writing-plans` plan and is built test-first.
+Status: approved 2026-11-20 (D6). Slices 0 and 1 merged; work proceeds by the gates below, not by dates (owner decision 2026-11-22 (3)). Each slice becomes its own superpowers `writing-plans` plan and is built test-first.
 
 Revision 2 reconciles the plan with the research report (`docs/research/research-report.md`) and the UKG Developer Policy note: PyMuPDF removed, impact tiers renamed and extended, an independent oracle, messy fixtures and mutation tests, a two-snapshot diff, fictional labelling, hostile-input requirements, and a synthetic-only scope with a future approval gate.
 
@@ -48,7 +48,7 @@ The change set is **derived by diffing the two snapshots**. It is never written 
   Every mutation must change the report exactly as stated.
 - **Differential check.** Database traversal and an in-memory traversal of the same graph must give identical results.
 
-## Slices (in order) and who builds them
+## Slices (dependency order) and who builds them
 
 | # | Slice | Done when | Design | Build | Check |
 |---|---|---|---|---|---|
@@ -62,6 +62,19 @@ The change set is **derived by diffing the two snapshots**. It is never written 
 | 6 | Snapshot diff (stable keys, field-level) plus directional traversal per `impact-propagation.md`; API endpoints `/graph`, `/entities/{id}/evidence`, `/impact` | Oracle exact match; 20+ mutations detected; deterministic hash; differential check | architect | implementer | architect |
 | 7 | Graph view: React Flow for **bounded subgraphs only** (impact neighbourhood); line style by display label; evidence panel (document, locator, snippet) | Playwright CLI on localhost: renders, click shows evidence, statuses distinguishable | implementer (`frontend-design`) | implementer | scout |
 | 8 | Impact report (API and UI) in the skill's report shape: change set; impact candidates (established, possible); **re-validation tasks**; coverage gaps; upstream constraints; context; not modelled | Oracle match; no "safe" wording (string test); no pay amounts | architect | implementer | architect milestone review |
+
+### Gates (owner decision 2026-11-22 (3))
+
+A slice starts only when its gate is met; otherwise the team works on another unblocked slice. A slice is done when it is merged with green CI and its "Done when" criteria are met.
+
+| Slice | Gate |
+|---|---|
+| 2b, 6 | Oracle (2a) frozen by the owner |
+| 3, 5 | Slice 1 merged (met) |
+| 4 | Slice 3 merged |
+| 7 | Slice 6 merged **and** the owner confirms 5 practitioner interviews are done |
+| 8 | Slice 6 merged |
+| Any real data | Gate G-REAL (unchanged) |
 
 ## Ingestion security requirements (slice 3)
 
