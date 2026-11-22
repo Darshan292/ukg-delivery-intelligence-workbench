@@ -480,3 +480,13 @@ def test_comment_single_cell_counts_toward_grid() -> None:
         "</commentList></comments>"
     ).encode()
     _rejects(rewrite_zip(_wb(), add={"xl/comments1.xml": com}), "sheet_too_large")
+
+
+def test_inflated_compress_size_cannot_hide_a_bomb() -> None:
+    # the central directory claims an enormous compressed size to make the ratio look small
+    data = rewrite_zip(
+        _wb(),
+        add={"xl/pad.xml": b"<a/>" * (2**20)},
+        fake_compress_sizes={"xl/pad.xml": 10**9},
+    )
+    _rejects(data, "archive_bad_entry_name")  # the entry would run past the end of the file

@@ -29,8 +29,9 @@ def zip_pairs(
     *,
     flag_bits: int = 0,
     fake_sizes: Mapping[str, int] | None = None,
+    fake_compress_sizes: Mapping[str, int] | None = None,
 ) -> bytes:
-    """Deflated zip. flag_bits and fake_sizes are set on the central directory only."""
+    """Deflated zip. flag_bits and the fake sizes are set on the central directory only."""
     out = BytesIO()
     patches: list[tuple[bytes, bytes]] = []
     with warnings.catch_warnings(), zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -44,6 +45,8 @@ def zip_pairs(
             info.flag_bits |= flag_bits
             if fake_sizes and info.filename in fake_sizes:
                 info.file_size = fake_sizes[info.filename]
+            if fake_compress_sizes and info.filename in fake_compress_sizes:
+                info.compress_size = fake_compress_sizes[info.filename]
     data = out.getvalue()
     for old, new in patches:
         data = data.replace(old, new)
@@ -63,6 +66,7 @@ def rewrite_zip(
     extra_pairs: Iterable[tuple[str, bytes]] = (),
     flag_bits: int = 0,
     fake_sizes: Mapping[str, int] | None = None,
+    fake_compress_sizes: Mapping[str, int] | None = None,
 ) -> bytes:
     replace, dropped = replace or {}, set(drop)
     with zipfile.ZipFile(BytesIO(data)) as zf:
@@ -72,4 +76,6 @@ def rewrite_zip(
             if i.filename not in dropped
         ]
     pairs += list((add or {}).items()) + list(extra_pairs)
-    return zip_pairs(pairs, flag_bits=flag_bits, fake_sizes=fake_sizes)
+    return zip_pairs(
+        pairs, flag_bits=flag_bits, fake_sizes=fake_sizes, fake_compress_sizes=fake_compress_sizes
+    )

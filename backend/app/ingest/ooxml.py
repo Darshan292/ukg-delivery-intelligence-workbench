@@ -243,10 +243,14 @@ def inspect_xlsx_package(data: bytes, limits: Limits) -> dict[str, Element]:
         files = {i.orig_filename: i for i in infos if not i.is_dir()}
         for n in files:
             _refuse_named(n)
+        # a header that claims more compressed bytes than the file holds is lying
+        if any(i.header_offset + i.compress_size > len(data) for i in files.values()):
+            raise IntakeRejected("archive_bad_entry_name")
         declared = sum(i.file_size for i in files.values())
         if declared > limits.zip_max_total_bytes:
             raise IntakeRejected("archive_too_large")
-        if declared / max(1, sum(i.compress_size for i in files.values())) > limits.zip_max_ratio:
+        compressed = max(1, min(len(data), sum(i.compress_size for i in files.values())))
+        if declared / compressed > limits.zip_max_ratio:
             raise IntakeRejected("archive_ratio")
         rd = _Reader(zf, limits)
 
