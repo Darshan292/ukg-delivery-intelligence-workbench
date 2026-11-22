@@ -54,6 +54,8 @@ def scan_xml(
             el.clear()
             if stack:
                 stack[-1].remove(el)  # clear() alone leaves the empty element attached: O(n) memory
+    except IntakeRejected:
+        raise  # a ValueError subclass: must not fall into the ValueError clause below
     except DefusedXmlException:
         raise IntakeRejected("xml_forbidden") from None
     except (ParseError, LookupError, ValueError):  # LookupError: unknown encoding names echo input
