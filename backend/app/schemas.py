@@ -34,3 +34,39 @@ class NeighbourhoodResponse(BaseModel):
     notice: str
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+
+class KeyTriple(BaseModel):
+    product_profile: str
+    entity_type: str
+    natural_key: str
+
+
+class ReviewClaimOut(BaseModel):
+    id: int
+    basis: str
+    polarity: str
+    method: str
+    confidence: str | None
+    scope_snapshot_id: int | None
+    live: bool
+    locators: list[LocatorOut]
+
+
+class ReviewItem(BaseModel):
+    relationship_id: int
+    type: str
+    qualifier: str | None
+    source: KeyTriple
+    target: KeyTriple
+    scoped: bool  # tells the client whether a verdict needs snapshot_id
+    state: str
+    label: str | None
+    flags: list[str]
+    conflict_kinds: list[str]
+    claims: list[ReviewClaimOut]
+
+
+class ReviewItemsResponse(BaseModel):
+    snapshot_id: int
+    items: list[ReviewItem]

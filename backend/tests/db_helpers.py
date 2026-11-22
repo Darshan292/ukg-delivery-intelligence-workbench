@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.db import get_session, sqlstate
 from app.domain.records import Records
 from app.main import create_app
+from app.store import ALL, save
 
 _MIG = Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0002_d3_schema.py"
 
@@ -108,3 +109,39 @@ def has_supersession_cycle(r: Records) -> bool:
                     seen.add(nxt)
                     todo.append(nxt)
     return False
+
+
+def save_as_roles(r: Records, owner: Engine, ingest: Engine, review: Engine) -> None:
+    with owner.begin() as c:
+        save(c, r, ("catalogues", "actors"))
+    with ingest.begin() as c:
+        save(c, r, tuple(f for f in ALL if f not in ("catalogues", "actors", "review_events")))
+    with review.begin() as c:
+        save(c, r, ("review_events",))
+
+
+TOKEN = "t" * 40  # FICTIONAL test token, not a secret
+
+
+def reviewer_client(engine: Engine, actor_id: int | None) -> TestClient:
+    """The app on `engine` with review configured for `actor_id` (nothing read from the env)."""
+    from pydantic import SecretStr
+
+    from app.config import Settings, get_settings
+
+    app = create_app()
+
+    def _session() -> Iterator[Session]:
+        with Session(engine) as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _session
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,  # pyright: ignore[reportCallIssue]
+        database_url=SecretStr("postgresql+pg8000://unused"),
+        reviewer_token=SecretStr(TOKEN),
+        reviewer_actor_id=actor_id,
+    )
+    return TestClient(
+        app, raise_server_exceptions=False, headers={"Authorization": f"Bearer {TOKEN}"}
+    )

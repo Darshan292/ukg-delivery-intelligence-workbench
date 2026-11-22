@@ -14,18 +14,9 @@ from sqlalchemy.exc import DBAPIError
 from app.db import sqlstate
 from app.domain.derive import evaluate
 from app.domain.records import Records
-from app.store import ALL, load, save
-from tests.db_helpers import Ids, has_supersession_cycle, norm, truncate
+from app.store import load
+from tests.db_helpers import Ids, has_supersession_cycle, norm, save_as_roles, truncate
 from tests.domain.strategies import worlds
-
-
-def save_as_roles(r: Records, owner: Engine, ingest: Engine, review: Engine) -> None:
-    with owner.begin() as c:
-        save(c, r, ("catalogues", "actors"))
-    with ingest.begin() as c:
-        save(c, r, tuple(f for f in ALL if f not in ("catalogues", "actors", "review_events")))
-    with review.begin() as c:
-        save(c, r, ("review_events",))
 
 
 @settings(
