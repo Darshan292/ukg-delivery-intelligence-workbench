@@ -16,6 +16,7 @@ const UNREACHABLE = "The API is not reachable. Start the backend and reload.";
 
 function messageFor(status: number, entity: string): string {
   if (status === 404) return `No entity with key ${entity}. Check the key in the address (?entity=...).`;
+  if (status === 409) return `More than one entity has the key ${entity}; add entity_type or product_profile.`;
   if (status === 422)
     return "Entity keys use letters, digits, dot, underscore and hyphen, up to 100 characters.";
   return UNREACHABLE;
