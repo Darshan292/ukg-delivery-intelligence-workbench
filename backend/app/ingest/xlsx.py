@@ -69,6 +69,7 @@ def extract_plain(data: bytes, limits: Limits) -> dict[str, Any]:
     sheets: list[dict[str, Any]] = []
     cells: list[dict[str, Any]] = []
     loaded_cells = 0
+    emitted = 0  # bytes the reply will carry; the parent refuses anything over the cap
     for position, ws_f in enumerate(wb_f.worksheets):
         ws_v = wb_v[ws_f.title]
         # defence in depth: the pre-load scan should already have refused all of this
@@ -106,14 +107,18 @@ def extract_plain(data: bytes, limits: Limits) -> dict[str, Any]:
                     formula = raw
                 else:
                     raise IntakeRejected("unsupported_cell")
-            value, vtype, snippet = _render(c_v.value, c_v.data_type)
+            value, vtype, _ = _render(c_v.value, c_v.data_type)
             if formula is None and vtype == "empty":
                 continue
+            emitted += 120 + sum(
+                len(str(x).encode("utf-8")) for x in (ws_f.title, formula, value) if x is not None
+            )
+            if emitted > limits.worker_max_reply_bytes // 2:  # headroom for JSON overhead
+                raise IntakeRejected("resource_limit")
             cells.append(
                 {
                     "sheet": ws_f.title,
                     "cell": c_f.coordinate,
-                    "snippet": snippet,
                     "formula": formula,
                     "value": str(value) if vtype == "number" else value,  # Decimal as text
                     "value_type": vtype,
@@ -123,6 +128,15 @@ def extract_plain(data: bytes, limits: Limits) -> dict[str, Any]:
                 }
             )
     return {"sheets": sheets, "cells": cells}
+
+
+def _snippet(value: Any, vtype: str) -> str:
+    """The locator snippet is derived from the value, so the reply need not carry it twice."""
+    if vtype == "empty":
+        return ""
+    if vtype == "boolean":
+        return "TRUE" if value else "FALSE"
+    return str(value)  # string, date, error and number are carried as their own text
 
 
 def _build(
@@ -145,7 +159,7 @@ def _build(
             XlsxCell(
                 id=i,
                 document_version_id=version_id,
-                snippet=d["snippet"],
+                snippet=_snippet(d["value"], d["value_type"]),
                 extractor=EXTRACTOR,
                 extracted_at=now,
                 kind="xlsx_cell",

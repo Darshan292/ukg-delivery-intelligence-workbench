@@ -62,6 +62,7 @@ class Limits:
     xml_max_depth: int = 100
     worker_seconds: float = 30  # wall clock for the sandboxed child (also its CPU limit)
     worker_memory_bytes: int = 1024 * _MIB  # RLIMIT_AS for the sandboxed child
+    worker_max_reply_bytes: int = 64 * _MIB  # JSON the child may send; placeholder, not measured
     pdf_max_pages: int = 500
     pdf_max_objects: int = 100_000
     pdf_page_seconds: float = 5

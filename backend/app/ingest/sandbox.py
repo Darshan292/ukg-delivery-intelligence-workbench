@@ -17,7 +17,6 @@ from typing import Any, get_args
 
 from app.ingest.errors import IntakeRejected, Limits, Reason
 
-_MAX_REPLY = 256 * 1024 * 1024  # a reply larger than this is a runaway child, not a result
 _REASONS = frozenset(get_args(Reason))
 
 
@@ -55,7 +54,7 @@ def _child(
             "error": "resource_limit" if _at_memory_limit(limits.worker_memory_bytes) else on_error
         }
     with contextlib.suppress(BaseException):  # on failure the parent sees EOF: resource_limit
-        conn.send_bytes(json.dumps(msg).encode())
+        conn.send_bytes(json.dumps(msg, ensure_ascii=False).encode("utf-8"))
     conn.close()
 
 
@@ -75,7 +74,7 @@ def run_sandboxed(
         if not recv.poll(limits.worker_seconds):
             raise IntakeRejected("resource_limit")
         try:
-            raw = recv.recv_bytes(_MAX_REPLY)
+            raw = recv.recv_bytes(limits.worker_max_reply_bytes)  # over the cap: never parsed
         except (EOFError, OSError):
             raise IntakeRejected("resource_limit") from None
     finally:

@@ -97,3 +97,59 @@ def test_workbook_over_the_memory_budget_is_resource_limit() -> None:
         )
     assert ei.value.reason == "resource_limit"
     _no_children()
+
+
+def big_reply(data: bytes, limits: Limits) -> object:
+    return {"x": "a" * (2 * 2**20)}
+
+
+def test_oversized_reply_is_never_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.ingest.sandbox as sb
+
+    parsed: list[int] = []
+    real = sb.json.loads
+
+    def spy(raw: bytes | str, *a: object, **k: object) -> object:
+        parsed.append(len(raw))
+        return real(raw, *a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(sb.json, "loads", spy)
+    with pytest.raises(IntakeRejected) as ei:
+        run_sandboxed(big_reply, b"", Limits(worker_max_reply_bytes=2**20))
+    assert ei.value.reason == "resource_limit" and parsed == []
+    _no_children()
+
+
+def test_non_ascii_heavy_workbook_hits_the_child_output_budget() -> None:
+    import random
+
+    rng = random.Random(1)  # noqa: S311  (test data)
+
+    def build(wb: Workbook) -> None:
+        ws = wb.active
+        assert ws is not None
+        for r in range(1, 101):  # well under the cell cap
+            ws.cell(
+                row=r,
+                column=1,
+                value="".join(chr(0x4E00 + rng.randrange(5000)) for _ in range(5000)),
+            )
+
+    data = workbook_bytes(build)  # ~1.5 MB of text; JSON would carry it more than once
+    with pytest.raises(IntakeRejected) as ei:
+        parse_xlsx(
+            data,
+            version_id=1,
+            first_locator_id=1,
+            now=datetime.now(UTC),
+            limits=Limits(worker_max_reply_bytes=2**20),
+        )
+    assert ei.value.reason == "resource_limit"
+    _no_children()
+
+
+def test_reply_carries_no_duplicate_snippet() -> None:
+    from app.ingest.xlsx import extract_plain
+
+    plain = extract_plain(workbook_bytes(lambda wb: wb.active.__setitem__("A1", "hello")), Limits())  # type: ignore[union-attr]
+    assert "snippet" not in plain["cells"][0]
