@@ -75,7 +75,8 @@ def test_duplicate_locator_content_rejected(ingest_engine: Engine, world_ids: Id
         c.execute(
             text(
                 "INSERT INTO evidence_locator VALUES (90, :dv, 'xlsx_cell',"
-                ' CAST(\'{"sheet": "S", "cell": "A1"}\' AS jsonb), \'other\', \'openpyxl@1\', now())'
+                ' CAST(\'{"sheet": "S", "cell": "A1"}\' AS jsonb),'
+                " 'other', 'openpyxl@1', now())"
             ),
             {"dv": world_ids.export_dv},
         )
