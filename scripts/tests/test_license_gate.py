@@ -241,7 +241,7 @@ def test_repo_exceptions_file_is_valid_and_exact() -> None:
         f"@img/sharp-libvips-{p}"
         for p in ["darwin-arm64", "darwin-x64", "linux-arm", "linux-arm64", "linux-ppc64", "linux-riscv64",
                   "linux-s390x", "linux-x64", "linuxmusl-arm64", "linuxmusl-x64"]
-    }
+    } | {f"@img/sharp-{p}" for p in ["win32-arm64", "win32-ia32", "win32-x64", "wasm32"]}
 
 
 def test_cli_uses_exceptions_file(tmp_path: Path) -> None:
@@ -253,3 +253,23 @@ def test_cli_uses_exceptions_file(tmp_path: Path) -> None:
     assert run_cli("--npm-json", str(f), "--exceptions", str(tmp_path / "none.toml")).returncode == 1
     (tmp_path / "bad.toml").write_text("[[exception]]\n")
     assert run_cli("--npm-json", str(f), "--exceptions", str(tmp_path / "bad.toml")).returncode == 1
+
+
+def test_blueoak_allowed() -> None:  # owner decision 2026-11-21 (4)
+    assert lg.classify("BlueOak-1.0.0") == "allow"
+    assert lg.check([pkg("BlueOak-1.0.0")], dev=False) == []
+
+
+def test_npm_lock_covers_every_platform(tmp_path: Path) -> None:
+    lock = {"packages": {
+        "": {"name": "root"},
+        "node_modules/a": {"version": "1.0.0", "license": "MIT"},
+        "node_modules/@x/win-only": {"version": "2.0.0", "license": "GPL-3.0-only", "optional": True, "os": ["win32"]},
+        "node_modules/d": {"version": "1.0.0", "license": "LGPL-3.0-only", "dev": True},
+    }}
+    f = tmp_path / "package-lock.json"
+    f.write_text(json.dumps(lock))
+    run, dev = lg.load_npm_lock(f, dev=False), lg.load_npm_lock(f, dev=True)
+    assert [p["name"] for p in run] == ["a", "@x/win-only"]
+    assert len(dev) == 3
+    assert run_cli("--npm-lock", str(f)).returncode == 1  # the win32-only GPL package is caught on Linux too

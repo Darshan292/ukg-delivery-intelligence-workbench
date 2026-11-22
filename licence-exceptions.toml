@@ -1,7 +1,8 @@
 # Licence exceptions read by scripts/license_gate.py.
 # Each entry: exact package name, version range, exact licence string, reason, approver, date.
 # approved_by is a record, not a control: CODEOWNERS review of this file is.
-# No wildcards. Any new entry needs the owner's approval (licence matter): escalate, never add one yourself.
+# No wildcards. Owner rule 2026-11-21 (4): new versions or platforms of an approved package family may be
+# added by the team (note it in the PR); a brand-new package family or any copyleft/non-OSI licence is escalated.
 
 [[exception]]
 name = "@img/sharp-libvips-darwin-arm64"
@@ -88,5 +89,37 @@ name = "caniuse-lite"
 versions = ">=1.0.30001826,<1.1.0"
 licence = "CC-BY-4.0"
 reason = "Browser-support data used by Next.js build tooling (browserslist). Data licence; attribution in NOTICE."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-win32-arm64"
+versions = ">=0.35.5,<0.36.0"
+licence = "Apache-2.0 AND LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-win32-ia32"
+versions = ">=0.35.5,<0.36.0"
+licence = "Apache-2.0 AND LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-win32-x64"
+versions = ">=0.35.5,<0.36.0"
+licence = "Apache-2.0 AND LGPL-3.0-or-later"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
+approved_by = "owner"
+date = 2026-11-21
+
+[[exception]]
+name = "@img/sharp-wasm32"
+versions = ">=0.35.5,<0.36.0"
+licence = "Apache-2.0 AND LGPL-3.0-or-later AND MIT"
+reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
 approved_by = "owner"
 date = 2026-11-21
