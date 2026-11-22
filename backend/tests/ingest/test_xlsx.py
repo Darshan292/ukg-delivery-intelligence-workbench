@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 import datetime as dt
+import logging
 from decimal import Decimal
 from io import BytesIO
 from typing import Any
@@ -300,3 +301,22 @@ def test_openpyxl_failure_maps_to_workbook_malformed() -> None:
     _rejects(
         _hand('<row r="1"><c r="A1" t="n"><v>not-a-number</v></c></row>'), "workbook_malformed"
     )
+
+
+def test_any_unexpected_exception_maps_to_a_fixed_reason(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import app.ingest.xlsx as xlsx_mod
+    from tests.ingest.hostile import MARKER
+
+    def boom(data: bytes, limits: Limits) -> dict[str, Any]:
+        raise RuntimeError(MARKER)
+
+    monkeypatch.setattr(xlsx_mod, "inspect_xlsx_package", boom)
+    with caplog.at_level(logging.DEBUG), pytest.raises(IntakeRejected) as ei:
+        _parse(workbook_bytes(lambda wb: None))
+    exc = ei.value
+    assert exc.reason == "workbook_malformed"
+    assert MARKER not in str(exc) and MARKER not in repr(exc)
+    assert exc.__cause__ is None and exc.__suppress_context__
+    assert all(MARKER not in r.getMessage() and r.exc_info is None for r in caplog.records)

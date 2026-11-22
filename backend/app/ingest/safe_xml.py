@@ -17,7 +17,7 @@ def parse_xml(data: bytes) -> Element:
         return fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
     except DefusedXmlException:
         raise IntakeRejected("xml_forbidden") from None
-    except ParseError:
+    except (ParseError, LookupError, ValueError):  # LookupError: unknown encoding names echo input
         raise IntakeRejected("xml_malformed") from None
 
 
@@ -56,5 +56,5 @@ def scan_xml(
                 stack[-1].remove(el)  # clear() alone leaves the empty element attached: O(n) memory
     except DefusedXmlException:
         raise IntakeRejected("xml_forbidden") from None
-    except ParseError:
+    except (ParseError, LookupError, ValueError):  # LookupError: unknown encoding names echo input
         raise IntakeRejected("xml_malformed") from None

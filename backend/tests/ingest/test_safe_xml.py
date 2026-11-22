@@ -64,3 +64,18 @@ def test_scan_xml_retains_no_tree() -> None:
     tracemalloc.stop()
     # cleared-but-attached children cost ~8 MB here; a true stream stays under 1 MB
     assert peak < 1024 * 1024
+
+
+BAD_ENCODING = f'<?xml version="1.0" encoding="{MARKER}"?><r/>'.encode()
+
+
+def test_unknown_encoding_is_xml_malformed_and_silent() -> None:
+    from app.ingest.safe_xml import scan_xml
+
+    for call in (parse_xml, lambda b: scan_xml(b, max_elements=10, max_depth=10)):
+        with pytest.raises(IntakeRejected) as ei:
+            call(BAD_ENCODING)
+        exc = ei.value
+        assert exc.reason == "xml_malformed"
+        assert MARKER not in str(exc) and MARKER not in repr(exc)
+        assert exc.__cause__ is None and exc.__suppress_context__

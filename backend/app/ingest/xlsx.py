@@ -140,7 +140,12 @@ def _parse(
 def parse_xlsx(
     data: bytes, *, version_id: int, first_locator_id: int, now: datetime, limits: Limits
 ) -> tuple[tuple[XlsxCell, ...], tuple[SheetFragment, ...], tuple[CellFragment, ...]]:
-    parts = inspect_xlsx_package(data, limits)
+    try:
+        parts = inspect_xlsx_package(data, limits)
+    except IntakeRejected:
+        raise
+    except Exception:  # never let an exception carrying file content escape
+        raise IntakeRejected("workbook_malformed") from None
     if any(
         "chartsheet" in e.get("Type", "")
         for n, root in parts.items()
