@@ -197,6 +197,49 @@ CREATE TRIGGER wb_append_only BEFORE UPDATE OR DELETE ON public.{t}
   FOR EACH STATEMENT EXECUTE FUNCTION public.wb_forbid_change();
 """
 
+# Constraint triggers (the approved slice wording: "constraint trigger plus role privileges").
+# NOT DEFERRABLE: a session cannot postpone the check with SET CONSTRAINTS. Actor rows are
+# immutable (append-only), so the check cannot be raced by changing the actor afterwards.
+# Trigger functions run with the caller's privileges: both app roles have SELECT on everything
+# they read, so no SECURITY DEFINER is needed. Every name is schema-qualified. Messages are fixed
+# strings and never contain values.
+RULES_DDL = """
+CREATE FUNCTION public.wb_is_human_reviewer(actor bigint) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (SELECT 1 FROM public.actor a
+                 WHERE a.id = actor AND a.kind = 'human' AND 'reviewer' = ANY (a.roles)) $$;
+
+CREATE FUNCTION public.wb_review_event_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT public.wb_is_human_reviewer(NEW.actor_id) THEN
+    RAISE EXCEPTION 'review: actor is not a human reviewer' USING ERRCODE = 'WB002';
+  END IF;
+  RETURN NULL;
+END $$;
+CREATE CONSTRAINT TRIGGER wb_review_event_rules AFTER INSERT ON public.review_event
+  NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION public.wb_review_event_rules();
+
+CREATE FUNCTION public.wb_document_version_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE prev public.document_version%ROWTYPE;
+BEGIN
+  IF NEW.snapshot_id IS NOT NULL AND
+     (SELECT product_profile FROM public.snapshot WHERE id = NEW.snapshot_id)
+       <> (SELECT product_profile FROM public.document WHERE id = NEW.document_id) THEN
+    RAISE EXCEPTION 'profiles: document version snapshot' USING ERRCODE = 'WB003';
+  END IF;
+  IF NEW.supersedes_version_id IS NULL THEN RETURN NULL; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.actor WHERE id = NEW.declared_by AND kind = 'human') THEN
+    RAISE EXCEPTION 'lineage: declarer must be human' USING ERRCODE = 'WB002';
+  END IF;
+  SELECT * INTO prev FROM public.document_version WHERE id = NEW.supersedes_version_id;
+  IF prev.document_id <> NEW.document_id OR prev.snapshot_id IS DISTINCT FROM NEW.snapshot_id THEN
+    RAISE EXCEPTION 'lineage: document or snapshot differs' USING ERRCODE = 'WB003';
+  END IF;
+  RETURN NULL;
+END $$;
+CREATE CONSTRAINT TRIGGER wb_document_version_rules AFTER INSERT ON public.document_version
+  NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION public.wb_document_version_rules();
+"""
+
 
 def upgrade() -> None:
     for t in ("evidence_locator", "relationship", "entity"):
@@ -206,6 +249,7 @@ def upgrade() -> None:
     op.execute(APPEND_ONLY_FN)
     for t in TABLES:
         op.execute(APPEND_ONLY_TRIGGER.format(t=t))
+    op.execute(RULES_DDL)
 
 
 def downgrade() -> None:

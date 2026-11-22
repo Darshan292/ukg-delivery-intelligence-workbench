@@ -92,13 +92,34 @@ def test_pdf_locator_roundtrip(store: Engine) -> None:
 def test_load_revalidates(store: Engine) -> None:
     w = World()
     w.reviewer()
+    dv = w.design()
+    w.entity("req", "Q")
+    w.locator(dv)
+    w.locator(dv)
+    with store.begin() as c:
+        save(c, w.build())
+        # an attribute whose locator is not listed: jsonb, so only the domain can refuse it
+        c.execute(
+            text(
+                "INSERT INTO entity_version VALUES (1, 1, 1, NULL,"
+                ' \'[{"name": "q", "value": "x", "locator_id": 2}]\', \'{1}\')'
+            )
+        )
+    with store.connect() as c, pytest.raises(ValidationError):
+        load(c)
+
+
+def test_load_revalidates_cross_record_rules(store: Engine) -> None:
+    """A rule that lives in `Records`, not in one leaf: the owner briefly disables the trigger."""
+    w = World()
+    w.reviewer()
     svc = w.service()
     dv = w.design()
     a, q = w.entity("cfg", "A"), w.entity("req", "Q")
     w.claim(w.rel("implements", a, q), dv)
     with store.begin() as c:
         save(c, w.build())
-        # a review event by a service actor: written as the owner, so only the domain can refuse
+        c.execute(text("ALTER TABLE review_event DISABLE TRIGGER wb_review_event_rules"))
         c.execute(
             text(
                 "INSERT INTO review_event (target_kind, relationship_id, verdict, actor_id)"
@@ -106,5 +127,6 @@ def test_load_revalidates(store: Engine) -> None:
             ),
             {"a": svc.id},
         )
+        c.execute(text("ALTER TABLE review_event ENABLE TRIGGER wb_review_event_rules"))
     with store.connect() as c, pytest.raises(ValidationError):
         load(c)
