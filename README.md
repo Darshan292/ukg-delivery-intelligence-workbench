@@ -42,7 +42,7 @@ You should see a FICTIONAL banner, a graph of three fictional entities (`REQ-T1`
 | [`docs/architecture/impact-propagation.md`](docs/architecture/impact-propagation.md) | Directional change-impact rules |
 | [`docs/decisions-for-approval.md`](docs/decisions-for-approval.md) | Decisions made and still open |
 | [`docs/risk-register.md`](docs/risk-register.md) | Risks and assumptions, including UKG Developer Policy constraints |
-| [`reports/UKG delivery intelligence research.md`](reports/UKG%20delivery%20intelligence%20research.md) | The research behind the design |
+| [`docs/research/research-report.md`](docs/research/research-report.md) | The research behind the design |
 
 ## Boundaries
 

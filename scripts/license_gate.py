@@ -3,7 +3,7 @@
 """Licence gate for dependency licences (stdlib only). Fails closed.
 
 ALLOW: MIT, BSD (2/3-clause), Apache-2.0, ISC, PSF, MPL-2.0, 0BSD, Unlicense,
-CC0-1.0, Python-2.0, Zlib.
+CC0-1.0, Python-2.0, Zlib, BlueOak-1.0.0.
 DEV-ONLY: LGPL (any version); passes only with --dev.
 DENY: GPL, AGPL, SSPL, BSL/BUSL, any "non-commercial" licence, and anything
 blank, UNKNOWN, "SEE LICENSE IN ..." or not recognised.
@@ -17,7 +17,7 @@ by exact name, version range (">=a,<b"; numeric dotted versions only) and the
 exact licence string. Anything malformed fails closed. New entries need the
 owner's approval (approved_by = "owner").
 
-Usage: license_gate.py (--pip-json FILE | --npm-json FILE) [--dev] [--exceptions FILE]
+Usage: license_gate.py (--pip-json FILE | --npm-json FILE | --npm-lock FILE) [--dev] [--exceptions FILE]
 """
 
 import argparse
@@ -42,7 +42,7 @@ _DEV_ONLY = re.compile(r"\blgpl|lesser general public|library general public")
 _ALLOW = re.compile(
     r"^(mit([- ]0)?( license)?|bsd([- ].*)?|apache([- ].*)?|isc( license.*)?|psf([- ].*)?"
     r"|python software foundation.*|python-2\.0.*|mpl[- ]2\.0.*|mozilla public license 2\.0.*"
-    r"|0bsd|unlicense|the unlicense.*|cc0-1\.0|zlib( license)?)$"
+    r"|0bsd|blueoak-1\.0\.0|unlicense|the unlicense.*|cc0-1\.0|zlib( license)?)$"
 )
 _TOKENS = re.compile(r"(\(|\)|\s+AND\s+|\s+OR\s+|\s+WITH\s+)")
 
@@ -210,11 +210,26 @@ def load_npm(path: Path) -> list[dict[str, str]]:
     return out
 
 
+def load_npm_lock(path: Path, dev: bool) -> list[dict[str, str]]:
+    """Every package in package-lock.json, for every platform (CI installs only Linux)."""
+    data: dict[str, Any] = json.loads(path.read_text())
+    out: list[dict[str, str]] = []
+    for key, val in data.get("packages", {}).items():
+        if not key or (val.get("dev") and not dev):
+            continue
+        lic = val.get("license") or val.get("licenses") or ""
+        if isinstance(lic, list):
+            lic = " AND ".join(str(x) for x in lic)
+        out.append({"name": key.split("node_modules/")[-1], "version": str(val.get("version", "")), "license": str(lic)})
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "")
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--pip-json", type=Path)
     g.add_argument("--npm-json", type=Path)
+    g.add_argument("--npm-lock", type=Path, help="package-lock.json: every platform; dev packages only with --dev")
     ap.add_argument("--dev", action="store_true", help="allow dev-only (LGPL) licences")
     ap.add_argument("--exceptions", type=Path, default=DEFAULT_EXCEPTIONS)
     a = ap.parse_args(argv)
@@ -223,7 +238,10 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as e:
         print(f"LICENCE GATE: cannot load exceptions ({e}); failing closed")
         return 1
-    pkgs = load_pip(a.pip_json) if a.pip_json else load_npm(a.npm_json)
+    if a.npm_lock:
+        pkgs = load_npm_lock(a.npm_lock, a.dev)
+    else:
+        pkgs = load_pip(a.pip_json) if a.pip_json else load_npm(a.npm_json)
     if not pkgs:
         print("LICENCE GATE: no packages in input; failing closed")
         return 1

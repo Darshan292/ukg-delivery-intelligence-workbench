@@ -2,7 +2,7 @@
 
 Status: approved 2026-11-20 (D6), not started (`docs/decisions-for-approval.md`). Each slice becomes its own superpowers `writing-plans` plan and is built test-first.
 
-Revision 2 reconciles the plan with the research report (`reports/UKG delivery intelligence research.md`) and the UKG Developer Policy note: PyMuPDF removed, impact tiers renamed and extended, an independent oracle, messy fixtures and mutation tests, a two-snapshot diff, fictional labelling, hostile-input requirements, and a synthetic-only scope with a future approval gate.
+Revision 2 reconciles the plan with the research report (`docs/research/research-report.md`) and the UKG Developer Policy note: PyMuPDF removed, impact tiers renamed and extended, an independent oracle, messy fixtures and mutation tests, a two-snapshot diff, fictional labelling, hostile-input requirements, and a synthetic-only scope with a future approval gate.
 
 ## Goal
 
