@@ -124,6 +124,11 @@ def save(
             for e in sorted(r.review_events, key=lambda e: (e.at, e.id)):
                 row = e.model_dump(exclude={"id", "at"})
                 conn.execute(insert(m.ReviewEvent), row)
+        elif field == "document_versions" and lineage is None:
+            # one statement shape per call: rows with and without supersedes_version_id differ
+            for part in (False, True):
+                if rows := _rows(r, field, part):
+                    conn.execute(insert(m.DocumentVersion), rows)
         elif rows := _rows(r, field, lineage):
             conn.execute(insert(_TABLE[field]), rows)
 
