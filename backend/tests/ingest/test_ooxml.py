@@ -403,3 +403,16 @@ def test_sheet_target_cannot_be_a_structural_part() -> None:
     data = _wb()
     rels = _part(data, WB_RELS).replace(b"/xl/worksheets/sheet1.xml", b"/xl/workbook.xml")
     _rejects(rewrite_zip(data, replace={WB_RELS: rels}), "unsupported_part")
+
+
+def test_sheet_target_cannot_be_a_rels_part_inside_the_sheet_folder() -> None:
+    # Passes the folder rule (xl/worksheets/...), so only the structural-part check stops it.
+    data = _wb()
+    sheet_rels = "xl/worksheets/_rels/sheet1.xml.rels"
+    empty = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>'
+    )
+    rels = _part(data, WB_RELS).replace(b"/xl/worksheets/sheet1.xml", b"/" + sheet_rels.encode())
+    crafted = rewrite_zip(data, replace={WB_RELS: rels}, add={sheet_rels: empty})
+    _rejects(crafted, "unsupported_part")
