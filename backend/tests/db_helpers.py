@@ -13,6 +13,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
 from app.db import sqlstate
+from app.domain.records import Records
 
 _MIG = Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0002_d3_schema.py"
 
@@ -40,3 +41,13 @@ def truncate(engine: Engine) -> None:
     """As the owner: append-only triggers do not cover TRUNCATE, and app roles never hold it."""
     with engine.begin() as c:
         c.execute(text(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY"))
+
+
+def norm(r: Records) -> dict[str, Any]:
+    """Comparable form of Records: `at` is database-assigned; catalogue types come back by name."""
+    d = r.model_dump(exclude={"review_events": {"__all__": {"at"}}})
+    for cat in d["catalogues"]:
+        cat["entity_types"] = sorted(cat["entity_types"], key=lambda t: t["name"])
+        cat["relationship_types"] = sorted(cat["relationship_types"], key=lambda t: t["name"])
+    d["catalogues"] = sorted(d["catalogues"], key=lambda c: c["product_profile"])
+    return d

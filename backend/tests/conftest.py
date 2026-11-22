@@ -11,8 +11,11 @@ Set REQUIRE_DB_TESTS=1 (CI) so that a missing Postgres fails instead of skipping
 import os
 import uuid
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import URL, make_url
@@ -20,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.main import create_app
+from tests.db_helpers import truncate
 from tests.pg_locate import find_pg_ctl
 
 
@@ -79,6 +83,27 @@ def client(db_engine: Engine) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_session] = _session
     yield TestClient(app)
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(scope="session")
+def migrated_url(db_url: URL) -> URL:
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "migrations"))
+    cfg.attributes["url"] = db_url.render_as_string(hide_password=False)
+    command.upgrade(cfg, "head")
+    return db_url
+
+
+@pytest.fixture
+def store(migrated_url: URL) -> Iterator[Engine]:
+    """Owner engine over empty tables."""
+    eng = create_engine(migrated_url)
+    truncate(eng)
+    yield eng
+    eng.dispose()
 
 
 @pytest.fixture
