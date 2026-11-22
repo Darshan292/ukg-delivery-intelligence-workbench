@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 """Typed records of the canonical relationship model (rev 2.1). Pure, in-memory, no I/O."""
 
+from decimal import Decimal
 from typing import Annotated, Final, Literal, Self
 
 from pydantic import (
@@ -199,3 +200,36 @@ class Catalogue(Record):
             if len(set(names)) != len(names):
                 raise ValueError("catalogue: duplicate type names")
         return self
+
+
+class Claim(Record):
+    id: Id
+    relationship_id: Id
+    basis: Basis
+    polarity: Polarity
+    method: Versioned
+    confidence: Annotated[Decimal, Field(ge=0, le=1)] | None = None
+    model_id: NonBlank | None = None
+    prompt_version: NonBlank | None = None
+    scope_snapshot_id: Id | None
+    locator_ids: SortedIds
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def _basis_fields(self) -> Self:
+        llm = self.basis == "llm_suggestion"
+        # owner Q3: explicit claims carry no confidence (a number on a parsed reference is invented)
+        if (self.basis == "explicit_source") == (self.confidence is not None):
+            raise ValueError(
+                "claim: confidence required for rule/llm claims, forbidden for explicit"
+            )
+        if llm != (self.model_id is not None and self.prompt_version is not None) or (
+            not llm and (self.model_id is not None or self.prompt_version is not None)
+        ):
+            raise ValueError("claim: model_id and prompt_version are for llm claims only")
+        return self
+
+    @property
+    def dedup_key(self) -> tuple[int, str, str, str, tuple[int, ...]]:
+        # RM e; the locator_set_hash is a Slice 5 storage detail, the sorted tuple is the key here
+        return (self.relationship_id, self.basis, self.method, self.polarity, self.locator_ids)
