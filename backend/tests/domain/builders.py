@@ -93,7 +93,7 @@ class World:
         self.actors.append(a)
         return a
 
-    def _default_reviewer(self) -> Actor:
+    def default_reviewer(self) -> Actor:
         self._reviewer = self._reviewer or self.reviewer()
         return self._reviewer
 
@@ -151,7 +151,7 @@ class World:
     def new_version(self, dv: DocumentVersion, by: Actor | None = None) -> DocumentVersion:
         doc = next(d for d in self.documents if d.id == dv.document_id)
         snap = next((s for s in self.snapshots if s.id == dv.snapshot_id), None)
-        return self._version_of(doc, snap, dv, by or self._default_reviewer())
+        return self._version_of(doc, snap, dv, by or self.default_reviewer())
 
     def entity(self, type: str, key: str, profile: ProductProfile = "synthetic") -> Entity:  # noqa: A002
         e = Entity(
@@ -247,7 +247,7 @@ class World:
             {
                 "id": self._id("event"),
                 "at": self._now(),
-                "actor_id": (by or self._default_reviewer()).id,
+                "actor_id": (by or self.default_reviewer()).id,
                 "target_kind": "relationship",
                 "relationship_id": rel.id,
                 "scope_snapshot_id": scope.id if scope else None,
@@ -283,7 +283,7 @@ class World:
             {
                 "id": self._id("event"),
                 "at": self._now(),
-                "actor_id": (by or self._default_reviewer()).id,
+                "actor_id": (by or self.default_reviewer()).id,
                 "target_kind": "claim",
                 "claim_id": claim.id,
                 "verdict": verdict,
@@ -314,3 +314,40 @@ class World:
             review_events=tuple(self.review_events),
             unresolved_references=tuple(self.unresolved_references),
         )
+
+
+def _next_event(r: Records) -> tuple[int, datetime, int]:
+    """(id, at, reviewer actor id) for an event that sorts after every existing one."""
+    eid = max((e.id for e in r.review_events), default=0) + 1
+    at = max((e.at for e in r.review_events), default=T0 + timedelta(days=365))
+    return eid, at + timedelta(seconds=1), next(a.id for a in r.actors if a.is_reviewer)
+
+
+def with_claim_event(r: Records, claim_id: int, verdict: str) -> Records:
+    eid, at, actor = _next_event(r)
+    ev = ClaimReviewEvent.model_validate(
+        {
+            "id": eid, "at": at, "actor_id": actor, "target_kind": "claim",
+            "claim_id": claim_id, "verdict": verdict, "reason": "r",
+        }
+    )  # fmt: skip
+    return r.extended(review_events=(ev,))
+
+
+def with_rel_event(
+    r: Records,
+    rel_id: int,
+    verdict: str,
+    scope: int | None,
+    successor: int | None = None,
+) -> Records:
+    eid, at, actor = _next_event(r)
+    ev = RelationshipReviewEvent.model_validate(
+        {
+            "id": eid, "at": at, "actor_id": actor, "target_kind": "relationship",
+            "relationship_id": rel_id, "scope_snapshot_id": scope, "verdict": verdict,
+            "reason": None if verdict == "accepted" else "r",
+            "successor_relationship_id": successor,
+        }
+    )  # fmt: skip
+    return r.extended(review_events=(ev,))

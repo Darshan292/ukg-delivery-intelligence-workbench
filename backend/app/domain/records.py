@@ -17,6 +17,7 @@ from app.domain.model import (
     Actor,
     Catalogue,
     Claim,
+    ClaimReviewEvent,
     Document,
     DocumentVersion,
     Entity,
@@ -25,6 +26,7 @@ from app.domain.model import (
     ProductProfile,
     Record,
     Relationship,
+    RelationshipReviewEvent,
     ReviewEvent,
     Snapshot,
     UnresolvedReference,
@@ -97,6 +99,22 @@ class Records(Record):
         out: dict[int, list[Claim]] = {}
         for c in sorted(self.claims, key=lambda c: c.id):
             out.setdefault(c.relationship_id, []).append(c)
+        return {k: tuple(v) for k, v in out.items()}
+
+    @cached_property
+    def claim_events_by_claim(self) -> dict[int, tuple[ClaimReviewEvent, ...]]:
+        out: dict[int, list[ClaimReviewEvent]] = {}
+        for e in sorted(self.review_events, key=lambda e: (e.at, e.id)):
+            if e.target_kind == "claim":
+                out.setdefault(e.claim_id, []).append(e)
+        return {k: tuple(v) for k, v in out.items()}
+
+    @cached_property
+    def relationship_events_by_relationship(self) -> dict[int, tuple[RelationshipReviewEvent, ...]]:
+        out: dict[int, list[RelationshipReviewEvent]] = {}
+        for e in sorted(self.review_events, key=lambda e: (e.at, e.id)):
+            if e.target_kind == "relationship":
+                out.setdefault(e.relationship_id, []).append(e)
         return {k: tuple(v) for k, v in out.items()}
 
     @cached_property
