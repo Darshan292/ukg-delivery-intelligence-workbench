@@ -50,3 +50,17 @@ def test_reason_has_no_content(tail: bytes) -> None:
     exc = ei.value
     assert MARKER not in str(exc) and MARKER not in repr(exc)
     assert exc.__cause__ is None and exc.__suppress_context__
+
+
+def test_scan_xml_retains_no_tree() -> None:
+    import tracemalloc
+
+    from app.ingest.safe_xml import scan_xml
+
+    data = b"<r>" + b"".join(b'<a n="%d" m="xxxxxxxx"/>' % i for i in range(100_000)) + b"</r>"
+    tracemalloc.start()
+    scan_xml(data, max_elements=1_000_000, max_depth=10)
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    # cleared-but-attached children cost ~8 MB here; a true stream stays under 1 MB
+    assert peak < 1024 * 1024

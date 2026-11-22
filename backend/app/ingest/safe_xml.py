@@ -32,7 +32,8 @@ def scan_xml(
 
     `on_start(local_tag, attributes)` sees every start element (used for cell and merge caps).
     """
-    count = depth = 0
+    count = 0
+    stack: list[Element] = []
     try:
         for event, el in iterparse(
             BytesIO(data),
@@ -43,14 +44,16 @@ def scan_xml(
         ):
             if event == "start":
                 count += 1
-                depth += 1
-                if count > max_elements or depth > max_depth:
+                stack.append(el)
+                if count > max_elements or len(stack) > max_depth:
                     raise IntakeRejected("xml_forbidden")
                 if on_start:
                     on_start(el.tag.rsplit("}", 1)[-1], el.attrib)
                 continue
-            depth -= 1
+            stack.pop()
             el.clear()
+            if stack:
+                stack[-1].remove(el)  # clear() alone leaves the empty element attached: O(n) memory
     except DefusedXmlException:
         raise IntakeRejected("xml_forbidden") from None
     except ParseError:
