@@ -130,3 +130,34 @@ def test_app_roles_cannot_disable_triggers_or_create(
     eng: Engine = request.getfixturevalue(role)
     with sqlstate_raised("42501"), eng.begin() as c:
         c.execute(text(sql))
+
+
+def test_review_event_time_is_statement_time_not_transaction_start(
+    review_engine: Engine, world_ids: Ids
+) -> None:
+    """A client holding a transaction open must not backdate (at, id) ordering to its start."""
+    with review_engine.begin() as c:
+        c.execute(text("SELECT pg_sleep(0.6)"))
+        gap = c.scalar(
+            text(
+                "WITH e AS (INSERT INTO review_event (target_kind, relationship_id, verdict,"
+                " actor_id) VALUES ('relationship', :r, 'accepted', :a) RETURNING at)"
+                " SELECT extract(epoch FROM (SELECT at FROM e) - now())"
+            ),
+            {"r": world_ids.unscoped_rel, "a": world_ids.reviewer},
+        )
+    assert gap is not None and gap > 0.5
+
+
+def test_every_function_pins_its_search_path(store: Engine) -> None:
+    with store.connect() as c:
+        rows = c.execute(
+            text(
+                "SELECT p.proname, coalesce(p.proconfig, '{}') FROM pg_proc p"
+                " JOIN pg_namespace n ON n.oid = p.pronamespace"
+                " WHERE n.nspname = 'public' AND p.proname LIKE 'wb\\_%'"
+            )
+        ).all()
+    assert len(rows) >= 9
+    for name, config in rows:
+        assert "search_path=pg_catalog, public" in config, name

@@ -40,7 +40,7 @@ TABLES = (
 WS = r"\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 
 PRE_DDL = r"""
-CREATE FUNCTION public.wb_all_nonblank(vals text[]) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
+CREATE FUNCTION public.wb_all_nonblank(vals text[]) RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
   SELECT NOT EXISTS (SELECT 1 FROM unnest(vals) v WHERE v IS NULL OR v !~ '[^__WS__]') $$;
 """
 
@@ -157,7 +157,9 @@ CREATE TABLE review_event (
   reason text CONSTRAINT ck_review_reason CHECK (reason ~ '[^__WS__]'),
   successor_relationship_id bigint REFERENCES relationship,
   actor_id bigint NOT NULL REFERENCES actor,
-  at timestamptz NOT NULL DEFAULT now(),        -- ordering key (at, id); never client-set (Task 4)
+  -- ordering key (at, id); never client-set. statement_timestamp, not now(): now() is the
+  -- transaction start, so a client holding a transaction open could backdate its verdicts
+  at timestamptz NOT NULL DEFAULT statement_timestamp(),
   CONSTRAINT ck_review_event_shape CHECK (
     (target_kind = 'claim' AND claim_id IS NOT NULL AND relationship_id IS NULL
       AND scope_snapshot_id IS NULL AND successor_relationship_id IS NULL
@@ -203,7 +205,7 @@ GRANT INSERT (target_kind, claim_id, relationship_id, scope_snapshot_id, verdict
 # owner question S5-Q4 (pending): every table is append-only, including the whole actor row and
 # the catalogue. Stricter than RM BC 30a (which freezes only actor kind and roles).
 APPEND_ONLY_FN = """
-CREATE FUNCTION public.wb_forbid_change() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.wb_forbid_change() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
   RAISE EXCEPTION 'append-only: % cannot be updated or deleted', TG_TABLE_NAME USING ERRCODE = 'WB001';
 END $$;
@@ -222,19 +224,19 @@ CREATE TRIGGER wb_append_only BEFORE UPDATE OR DELETE ON public.{t}
 # they read, so no SECURITY DEFINER is needed. Every name is schema-qualified. Messages are fixed
 # strings and never contain values.
 RULES_DDL = """
-CREATE FUNCTION public.wb_is_human_reviewer(actor bigint) RETURNS boolean LANGUAGE sql STABLE AS $$
+CREATE FUNCTION public.wb_is_human_reviewer(actor bigint) RETURNS boolean LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
   SELECT EXISTS (SELECT 1 FROM public.actor a
                  WHERE a.id = actor AND a.kind = 'human' AND 'reviewer' = ANY (a.roles)) $$;
 
 CREATE FUNCTION public.wb_is_scoped(source_id bigint, target_id bigint) RETURNS boolean
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
   -- no catalogue row (unknown profile) counts as scoped (decision 0003 Q7)
   SELECT bool_and(coalesce(t.snapshot_scoped, true))
   FROM public.entity e
   LEFT JOIN public.catalogue_entity_type t ON t.product_profile = e.product_profile AND t.name = e.entity_type
   WHERE e.id IN (source_id, target_id) $$;
 
-CREATE FUNCTION public.wb_review_event_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.wb_review_event_rules() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE rel public.relationship%ROWTYPE; profile text;
 BEGIN
   IF NOT public.wb_is_human_reviewer(NEW.actor_id) THEN
@@ -276,7 +278,7 @@ END $$;
 CREATE CONSTRAINT TRIGGER wb_review_event_rules AFTER INSERT ON public.review_event
   NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION public.wb_review_event_rules();
 
-CREATE FUNCTION public.wb_document_version_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.wb_document_version_rules() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE prev public.document_version%ROWTYPE;
 BEGIN
   IF NEW.snapshot_id IS NOT NULL AND
@@ -297,7 +299,7 @@ END $$;
 CREATE CONSTRAINT TRIGGER wb_document_version_rules AFTER INSERT ON public.document_version
   NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION public.wb_document_version_rules();
 
-CREATE FUNCTION public.wb_relationship_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.wb_relationship_rules() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE s public.entity%ROWTYPE; t public.entity%ROWTYPE; profile text; spec public.catalogue_relationship_type%ROWTYPE;
 BEGIN
   SELECT * INTO s FROM public.entity WHERE id = NEW.source_entity_id;
@@ -317,7 +319,8 @@ BEGIN
   IF spec.qualifier_required <> (NEW.qualifier IS NOT NULL) THEN
     RAISE EXCEPTION 'catalogue: qualifier' USING ERRCODE = 'WB003';
   END IF;
-  -- explicit COLLATE: plpgsql row variables may not carry the column collation
+  -- the %ROWTYPE fields keep the column's "C" collation, so this COLLATE is redundant;
+  -- it stays so the byte-order rule is visible here and survives a change of column type
   IF NEW.type = 'same_as' AND (s.product_profile <> t.product_profile OR s.entity_type <> t.entity_type
      OR NOT (s.natural_key COLLATE "C" < t.natural_key COLLATE "C")) THEN
     RAISE EXCEPTION 'same_as: profile, type and key order' USING ERRCODE = 'WB003';
@@ -327,7 +330,7 @@ END $$;
 CREATE TRIGGER wb_relationship_rules BEFORE INSERT ON public.relationship
   FOR EACH ROW EXECUTE FUNCTION public.wb_relationship_rules();
 
-CREATE FUNCTION public.wb_claim_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.wb_claim_rules() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE n bigint; scopes bigint; scope bigint;
 BEGIN
   SELECT count(*), count(DISTINCT coalesce(dv.snapshot_id, -1)), max(dv.snapshot_id)  -- ids are > 0, so -1 cannot collide
@@ -351,7 +354,7 @@ END $$;
 CREATE TRIGGER wb_claim_rules BEFORE INSERT ON public.claim
   FOR EACH ROW EXECUTE FUNCTION public.wb_claim_rules();
 
-CREATE FUNCTION public.wb_entity_version_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.wb_entity_version_rules() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE dv public.document_version%ROWTYPE; n bigint; ent_profile text; doc_profile text;
 BEGIN
   SELECT * INTO dv FROM public.document_version WHERE id = NEW.document_version_id;

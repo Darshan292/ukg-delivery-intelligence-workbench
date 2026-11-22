@@ -200,7 +200,7 @@ class ReviewEvent(Base):
         _PK, ForeignKey("relationship.id")
     )
     actor_id: Mapped[int] = mapped_column(_PK, ForeignKey("actor.id"))
-    at: Mapped[datetime] = mapped_column(_TZ, server_default=func.now())
+    at: Mapped[datetime] = mapped_column(_TZ, server_default=func.statement_timestamp())
 
 
 class UnresolvedReference(Base):
