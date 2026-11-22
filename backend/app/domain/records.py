@@ -104,6 +104,15 @@ class Records(Record):
             v.supersedes_version_id for v in self.document_versions if v.supersedes_version_id
         )
 
+    def extended(self, **more: tuple[object, ...]) -> Self:
+        """Append records and re-validate everything (an in-place copy would skip the checks)."""
+        unknown = set(more) - set(Records.model_fields)
+        if unknown:
+            raise TypeError("extended: unknown record field")
+        return type(self).model_validate(
+            {f: getattr(self, f) + more.get(f, ()) for f in Records.model_fields}
+        )
+
     def relationship_profile(self, rel: Relationship) -> ProductProfile:
         """The endpoint profile that is not `unknown`, else `unknown`."""
         for e in (self.entity_by_id[rel.source_entity_id], self.entity_by_id[rel.target_entity_id]):
@@ -117,6 +126,16 @@ class Records(Record):
         if cat is None:
             return None
         return next((t for t in cat.entity_types if t.name == entity.entity_type), None)
+
+
+def is_scoped(r: Records, rel: Relationship) -> bool:
+    """Both endpoint types are snapshot-scoped. An `unknown`-profile endpoint counts as scoped."""
+    # owner question Q7 (pending): unknown endpoints count as snapshot-scoped (conservative)
+    for e in (r.entity_by_id[rel.source_entity_id], r.entity_by_id[rel.target_entity_id]):
+        spec = r.entity_spec(e)
+        if spec is not None and not spec.snapshot_scoped:
+            return False
+    return True
 
 
 def _ids(r: Records) -> None:
@@ -265,6 +284,69 @@ def _same_as(r: Records) -> None:
             raise _fail("same_as: profile, type and key order", "relationship", rel.id)
 
 
+def _lineage(r: Records) -> None:
+    for v in r.document_versions:
+        if v.supersedes_version_id is None:
+            continue
+        old = r.version_by_id[v.supersedes_version_id]
+        if r.actor_by_id[v.declared_by].kind != "human":
+            raise _fail("lineage: declarer must be human", "document_version", v.id)
+        if old.document_id != v.document_id:
+            raise _fail("lineage: document differs", "document_version", v.id)
+        if old.snapshot_id != v.snapshot_id:
+            raise _fail("lineage: snapshot differs", "document_version", v.id)
+
+
+def _entity_versions(r: Records) -> None:
+    for ev in r.entity_versions:
+        dv = r.version_by_id[ev.document_version_id]
+        if ev.snapshot_id != dv.snapshot_id:
+            raise _fail(
+                "entity_version: snapshot differs from its version", "entity_version", ev.id
+            )
+        if any(r.locator_by_id[i].document_version_id != dv.id for i in ev.locator_ids):
+            raise _fail("entity_version: locator in another version", "entity_version", ev.id)
+
+
+def _claim_scope(r: Records) -> None:
+    for c in r.claims:
+        scopes = {
+            r.version_by_id[r.locator_by_id[i].document_version_id].snapshot_id
+            for i in c.locator_ids
+        }
+        if len(scopes) > 1 and None in scopes:
+            # owner Q5: reject mixing scoped and unscoped locators
+            raise _fail("claim: mixed scoped and unscoped locators", "claim", c.id)
+        if len(scopes) > 1:
+            raise _fail("claim: locators span more than one snapshot", "claim", c.id)
+        if c.scope_snapshot_id not in scopes:
+            raise _fail("claim: scope differs from locator snapshot", "claim", c.id)
+
+
+def _review_events(r: Records) -> None:
+    for e in r.review_events:
+        if not r.actor_by_id[e.actor_id].is_reviewer:
+            raise _fail("review: actor is not a human reviewer", "review_event", e.id)
+        if e.target_kind == "claim":
+            continue
+        rel = r.relationship_by_id[e.relationship_id]
+        if is_scoped(r, rel):
+            snap = None if e.scope_snapshot_id is None else r.snapshot_by_id[e.scope_snapshot_id]
+            if snap is None or snap.product_profile != r.relationship_profile(rel):
+                raise _fail(
+                    "review: scope must name a snapshot of the profile", "review_event", e.id
+                )
+        elif e.scope_snapshot_id is not None:
+            raise _fail(
+                "review: scope must be null for unscoped relationship", "review_event", e.id
+            )
+        if e.successor_relationship_id is not None and (
+            r.relationship_by_id[e.successor_relationship_id].source_entity_id
+            != rel.source_entity_id
+        ):
+            raise _fail("review: successor must share the source entity", "review_event", e.id)
+
+
 _CHECKS: Final[tuple[Callable[[Records], None], ...]] = (
     _ids,
     _references,
@@ -272,4 +354,8 @@ _CHECKS: Final[tuple[Callable[[Records], None], ...]] = (
     _catalogue,
     _profiles,
     _same_as,
+    _lineage,
+    _entity_versions,
+    _claim_scope,
+    _review_events,
 )
