@@ -50,11 +50,15 @@ def _refuse_named(name: str) -> None:
 
 
 class _Reader:
-    """Streams entries, counting the bytes actually inflated (headers can lie)."""
+    """Streams entries, counting the bytes actually inflated.
 
-    def __init__(self, zf: zipfile.ZipFile, limits: Limits, data_len: int) -> None:
+    No streaming ratio check: zipfile stops each entry at its header's file_size (a lie there ends
+    in a CRC error, tested by test_lying_size_header), so the declared ratio check is the only one
+    that can fire. A running ratio check was dead code and was removed.
+    """
+
+    def __init__(self, zf: zipfile.ZipFile, limits: Limits) -> None:
         self.zf, self.limits, self.total = zf, limits, 0
-        self.compressed = max(1, min(data_len, sum(i.compress_size for i in zf.infolist())))
 
     def read(self, info: zipfile.ZipInfo, cap: int | None = None) -> bytes:
         chunks: list[bytes] = []
@@ -68,8 +72,6 @@ class _Reader:
                         cap is not None and n > cap
                     ):
                         raise IntakeRejected("archive_too_large")
-                    if self.total > self.limits.zip_max_ratio * self.compressed:
-                        raise IntakeRejected("archive_ratio")
                     chunks.append(chunk)
         except IntakeRejected:
             raise
@@ -246,7 +248,7 @@ def inspect_xlsx_package(data: bytes, limits: Limits) -> dict[str, Element]:
             raise IntakeRejected("archive_too_large")
         if declared / max(1, sum(i.compress_size for i in files.values())) > limits.zip_max_ratio:
             raise IntakeRejected("archive_ratio")
-        rd = _Reader(zf, limits, len(data))
+        rd = _Reader(zf, limits)
 
         def tree(name: str) -> Element:
             return parse_xml(rd.read(files[name], limits.xml_tree_max_bytes))
