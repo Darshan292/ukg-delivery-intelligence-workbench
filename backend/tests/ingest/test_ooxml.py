@@ -218,7 +218,7 @@ def test_sheet_outside_worksheets_folder_refused_before_openpyxl(
     import app.ingest.xlsx as xlsx_mod
 
     called: list[int] = []
-    monkeypatch.setattr(xlsx_mod, "load_workbook", lambda *a, **k: called.append(1))  # type: ignore[arg-type]
+    monkeypatch.setattr(xlsx_mod, "run_sandboxed", lambda *a, **k: called.append(1))  # type: ignore[arg-type]
     data = _moved_sheet(_sheet_with_merge("A1:B2"))
     with pytest.raises(IntakeRejected) as ei:
         xlsx_mod.parse_xlsx(data, version_id=1, first_locator_id=1, now=datetime.now(UTC), limits=L)

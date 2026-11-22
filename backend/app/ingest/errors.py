@@ -33,6 +33,7 @@ Reason = Literal[
     "pdf_malformed",
     "pdf_worker_failed",
     "package_inconsistent",
+    "resource_limit",
     "records_invalid",
 ]
 
@@ -53,12 +54,14 @@ class Limits:
     zip_max_entries: int = 1000
     zip_max_total_bytes: int = 50 * _MIB
     zip_max_ratio: int = 100
-    sheet_max_cells: int = 1_000_000  # max_row x max_column grid
-    workbook_max_cells: int = 2_000_000  # sum of sheet grids across the workbook
+    sheet_max_cells: int = 100_000  # max_row x max_column grid
+    workbook_max_cells: int = 100_000  # sum of sheet grids across the workbook
     max_merged_cells: int = 100_000  # sum of merge areas
     xml_tree_max_bytes: int = 2 * _MIB  # parts parsed into a tree (content types, rels, workbook)
     xml_max_elements: int = 5_000_000  # streamed scan of every other XML part
     xml_max_depth: int = 100
+    worker_seconds: float = 30  # wall clock for the sandboxed child (also its CPU limit)
+    worker_memory_bytes: int = 1024 * _MIB  # RLIMIT_AS for the sandboxed child
     pdf_max_pages: int = 500
     pdf_max_objects: int = 100_000
     pdf_page_seconds: float = 5

@@ -14,7 +14,7 @@ from openpyxl.worksheet.formula import ArrayFormula
 from app.domain.locators import XlsxCell
 from app.ingest.errors import IntakeRejected, Limits, Reason
 from app.ingest.fragments import CellFragment
-from app.ingest.xlsx import parse_xlsx
+from app.ingest.xlsx import extract_plain, parse_xlsx
 from tests.ingest.hostile import SS_NS, rewrite_zip, workbook_bytes
 
 NOW = dt.datetime(2026, 11, 22, 9, 0, tzinfo=dt.UTC)
@@ -268,7 +268,8 @@ def test_parse_does_not_iterate_the_grid(monkeypatch: pytest.MonkeyPatch) -> Non
         assert ws is not None
         ws["A1"], ws["Z40"] = "a", "z"
 
-    assert set(_by_cell(workbook_bytes(build))) == {"A1", "Z40"}
+    plain = extract_plain(workbook_bytes(build), L)  # in-process: the patch must be visible
+    assert {c["cell"] for c in plain["cells"]} == {"A1", "Z40"}
 
 
 def test_post_load_check_is_independent_of_the_prescan(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -9,6 +9,7 @@ overwrites in non-anchor merged cells are not extracted; add them when a slice n
 import datetime as dt
 import warnings
 from datetime import datetime
+from decimal import Decimal
 from io import BytesIO
 from typing import Any
 
@@ -22,6 +23,7 @@ from app.domain.model import number_from_cell_value
 from app.ingest.errors import IntakeRejected, Limits
 from app.ingest.fragments import CellFragment, SheetFragment, ValueType
 from app.ingest.ooxml import inspect_xlsx_package
+from app.ingest.sandbox import run_sandboxed
 
 EXTRACTOR = "xlsx_cells@1"
 
@@ -57,18 +59,15 @@ def _hidden_columns(ws: Worksheet) -> set[int]:
     return out
 
 
-def _parse(
-    data: bytes, version_id: int, first_locator_id: int, now: datetime, limits: Limits
-) -> tuple[tuple[XlsxCell, ...], tuple[SheetFragment, ...], tuple[CellFragment, ...]]:
+def extract_plain(data: bytes, limits: Limits) -> dict[str, Any]:
+    """Runs in the sandboxed child: openpyxl in, plain JSON-able data out (no models)."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         # openpyxl exposes either formulas or cached values, never both: load twice
         wb_f = load_workbook(BytesIO(data), data_only=False, keep_vba=False, keep_links=False)
         wb_v = load_workbook(BytesIO(data), data_only=True, keep_vba=False, keep_links=False)
-    locs: list[XlsxCell] = []
-    sheets: list[SheetFragment] = []
-    cells: list[CellFragment] = []
-    next_id = first_locator_id
+    sheets: list[dict[str, Any]] = []
+    cells: list[dict[str, Any]] = []
     loaded_cells = 0
     for position, ws_f in enumerate(wb_f.worksheets):
         ws_v = wb_v[ws_f.title]
@@ -85,12 +84,12 @@ def _parse(
         hidden_rows = {i for i, d in ws_f.row_dimensions.items() if d.hidden}
         hidden_cols = _hidden_columns(ws_f)
         sheets.append(
-            SheetFragment(
-                name=ws_f.title,
-                position=position,
-                state=ws_f.sheet_state,
-                merged_ranges=tuple(merges),
-            )
+            {
+                "name": ws_f.title,
+                "position": position,
+                "state": ws_f.sheet_state,
+                "merged_ranges": merges,
+            }
         )
         # only cells that exist: iter_rows would allocate the whole row x column grid
         cells_f, cells_v = ws_f._cells, ws_v._cells  # pyright: ignore[reportPrivateUsage]
@@ -110,31 +109,63 @@ def _parse(
             value, vtype, snippet = _render(c_v.value, c_v.data_type)
             if formula is None and vtype == "empty":
                 continue
-            locs.append(
-                XlsxCell(
-                    id=next_id,
-                    document_version_id=version_id,
-                    snippet=snippet,
-                    extractor=EXTRACTOR,
-                    extracted_at=now,
-                    kind="xlsx_cell",
-                    sheet=ws_f.title,
-                    cell=c_f.coordinate,
-                )
-            )
             cells.append(
-                CellFragment(
-                    locator_id=next_id,
-                    formula=formula,
-                    value=value,
-                    value_type=vtype,
-                    row_hidden=c_f.row in hidden_rows,
-                    column_hidden=c_f.column in hidden_cols,
-                    merged_range=anchors.get((c_f.row, c_f.column)),
-                )
+                {
+                    "sheet": ws_f.title,
+                    "cell": c_f.coordinate,
+                    "snippet": snippet,
+                    "formula": formula,
+                    "value": str(value) if vtype == "number" else value,  # Decimal as text
+                    "value_type": vtype,
+                    "row_hidden": c_f.row in hidden_rows,
+                    "column_hidden": c_f.column in hidden_cols,
+                    "merged_range": anchors.get((c_f.row, c_f.column)),
+                }
             )
-            next_id += 1
-    return tuple(locs), tuple(sheets), tuple(cells)
+    return {"sheets": sheets, "cells": cells}
+
+
+def _build(
+    plain: dict[str, Any], version_id: int, first_locator_id: int, now: datetime
+) -> tuple[tuple[XlsxCell, ...], tuple[SheetFragment, ...], tuple[CellFragment, ...]]:
+    """Parent side: validate the child's plain data into the typed models."""
+    sheets = tuple(
+        SheetFragment(
+            name=d["name"],
+            position=d["position"],
+            state=d["state"],
+            merged_ranges=tuple(d["merged_ranges"]),
+        )
+        for d in plain["sheets"]
+    )
+    locs: list[XlsxCell] = []
+    cells: list[CellFragment] = []
+    for i, d in enumerate(plain["cells"], first_locator_id):
+        locs.append(
+            XlsxCell(
+                id=i,
+                document_version_id=version_id,
+                snippet=d["snippet"],
+                extractor=EXTRACTOR,
+                extracted_at=now,
+                kind="xlsx_cell",
+                sheet=d["sheet"],
+                cell=d["cell"],
+            )
+        )
+        value = Decimal(d["value"]) if d["value_type"] == "number" else d["value"]
+        cells.append(
+            CellFragment(
+                locator_id=i,
+                formula=d["formula"],
+                value=value,
+                value_type=d["value_type"],
+                row_hidden=d["row_hidden"],
+                column_hidden=d["column_hidden"],
+                merged_range=d["merged_range"],
+            )
+        )
+    return tuple(locs), sheets, tuple(cells)
 
 
 def parse_xlsx(
@@ -155,8 +186,10 @@ def parse_xlsx(
         # owner question S3-Q13 (pending): chartsheets are refused (checked here: openpyxl
         # itself raises on an empty one)
         raise IntakeRejected("unsupported_cell")
+    # the backstop for any scanner/openpyxl disagreement: openpyxl runs in a limited child
+    plain = run_sandboxed(extract_plain, data, limits)
     try:
-        return _parse(data, version_id, first_locator_id, now, limits)
+        return _build(plain, version_id, first_locator_id, now)
     except IntakeRejected:
         raise
     except Exception:  # openpyxl and pydantic raise many types on hostile input

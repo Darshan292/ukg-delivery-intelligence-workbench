@@ -128,9 +128,10 @@ def test_oversize() -> None:
 
 
 def test_same_bytes_twice() -> None:
-    first = _go(_base(), _wb())
+    data = _wb()  # saved workbooks embed a timestamp: build the bytes once
+    first = _go(_base(), data)
     with pytest.raises(IntakeRejected) as ei:
-        _go(first.records, _wb())
+        _go(first.records, data)
     assert ei.value.reason == "already_ingested"
 
 
@@ -210,4 +211,5 @@ def test_rejection_is_clean_and_silent_about_content(
 
 
 def test_deterministic() -> None:
-    assert _go(_base(), _wb()) == _go(_base(), _wb())
+    data = _wb()
+    assert _go(_base(), data) == _go(_base(), data)
