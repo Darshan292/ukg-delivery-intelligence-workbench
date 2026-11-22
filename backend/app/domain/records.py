@@ -225,6 +225,11 @@ def _unique(rule: str, kind: str, items: Iterable[tuple[object, int]]) -> None:
 def _uniqueness(r: Records) -> None:
     _unique("entity key", "entity", ((e.key, e.id) for e in r.entities))
     _unique("relationship key", "relationship", ((x.key, x.id) for x in r.relationships))
+    _unique(
+        "entity version",
+        "entity_version",
+        (((v.entity_id, v.document_version_id), v.id) for v in r.entity_versions),
+    )
     _unique("sha256", "document_version", ((v.sha256, v.id) for v in r.document_versions))
     _unique(
         "successor",

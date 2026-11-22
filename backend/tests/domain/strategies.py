@@ -75,6 +75,7 @@ def worlds(draw: st.DrawFn) -> Records:
 
     for e in cfgs:
         for dv in exports:
+            # at most one per (entity, export): the store is unique on (entity, document version)
             if draw(_booleans()):
                 w.version(e, dv, q=draw(st.sampled_from(VALUES)))
 

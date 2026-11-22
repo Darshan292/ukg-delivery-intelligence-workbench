@@ -161,6 +161,13 @@ def test_records_rejects_two_successors_for_one_version() -> None:
         grow(r, "document_versions", dv.model_copy(update={"id": 99, "sha256": "b" * 64}))
 
 
+def test_records_rejects_duplicate_entity_version_per_document_version() -> None:
+    r = rich()
+    ev = r.entity_versions[0]
+    with pytest.raises(ValidationError, match="uniqueness: entity version"):
+        grow(r, "entity_versions", ev.model_copy(update={"id": 99}))
+
+
 def test_records_rejects_duplicate_locator_content_key() -> None:
     r = rich()
     with pytest.raises(ValidationError, match="uniqueness: locator content_key"):
