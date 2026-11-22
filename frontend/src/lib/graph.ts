@@ -3,7 +3,7 @@
 
 import type { Edge, Node } from "@xyflow/react";
 
-import type { ImpactResponse, LocatorOut } from "./types";
+import type { NeighbourhoodResponse, LocatorOut } from "./types";
 
 export type NodeData = {
   entityKey: string;
@@ -22,7 +22,7 @@ const byId = (a: { id: string }, b: { id: string }) =>
 export type Orientation = "horizontal" | "vertical";
 
 export function toFlow(
-  resp: ImpactResponse,
+  resp: NeighbourhoodResponse,
   orientation: Orientation = "horizontal",
 ): {
   nodes: Node<NodeData>[];

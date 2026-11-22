@@ -4,7 +4,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import fixture from "@/lib/__fixtures__/impact.json";
+import fixture from "@/lib/__fixtures__/neighbourhood.json";
 import type { GraphEdge } from "@/lib/types";
 import { EvidencePanel } from "./EvidencePanel";
 

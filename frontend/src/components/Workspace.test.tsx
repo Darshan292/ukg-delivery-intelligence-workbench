@@ -4,7 +4,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import fixture from "@/lib/__fixtures__/impact.json";
+import fixture from "@/lib/__fixtures__/neighbourhood.json";
 import { Workspace } from "./Workspace";
 
 // React Flow needs layout APIs jsdom lacks; the list is the accessible twin and carries the logic under test.
