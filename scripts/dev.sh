@@ -20,7 +20,11 @@ case "$MODE" in
   *) echo "MODE must be docker or local" >&2; exit 2 ;;
 esac
 
-(cd backend && uv run alembic upgrade head && uv run python -m app.seed)
+# Migrate and seed as the owner; the seed also creates the dev login wb_api_dev (a wb_review member).
+(cd backend && uv run alembic upgrade head && DEV_APP_DB_PASSWORD=wb_api_dev uv run python -m app.seed)
+# The API runs as a wb_review member, never as the owner (dev-only credentials, like tracer:tracer).
+# Review stays disabled until REVIEWER_TOKEN (32+ characters) and REVIEWER_ACTOR_ID=2 are exported.
+DATABASE_URL=${DATABASE_URL/tracer:tracer@/wb_api_dev:wb_api_dev@}; export DATABASE_URL
 
 pids=()
 stop() {

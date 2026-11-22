@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 
-from sqlalchemy import Engine, text
+import uuid
 
-from app.seed import build_tracer_records, seed_tracer_graph
+import pytest
+from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.engine import URL
+
+from app.seed import build_tracer_records, ensure_dev_login, seed_tracer_graph
 from app.store import load
 from tests.db_helpers import TABLES
 
@@ -55,3 +59,38 @@ def test_seed_actor_2_is_a_human_reviewer_and_actor_1_is_not() -> None:
     r = build_tracer_records()
     assert r.actor_by_id[2].is_reviewer
     assert r.actor_by_id[1].kind == "service"
+
+
+NEW_PW = "second_pw_5678"  # FICTIONAL dev-only value
+
+
+def test_dev_login_is_a_wb_review_member_and_idempotent(store: Engine, migrated_url: URL) -> None:
+    name = f"wb_dev_t{uuid.uuid4().hex[:8]}"
+    try:
+        for pw in ("first_pw_1234", NEW_PW):  # second run: ALTER, not CREATE
+            with store.begin() as c:
+                ensure_dev_login(c, name, pw)
+        with store.connect() as c:
+            assert c.scalar(text("SELECT pg_has_role(:n, 'wb_review', 'MEMBER')"), {"n": name})
+            assert not c.scalar(text("SELECT pg_has_role(:n, 'wb_ingest', 'MEMBER')"), {"n": name})
+        eng = create_engine(migrated_url.set(username=name, password=NEW_PW))  # noqa: S106
+        with eng.connect() as c:
+            assert c.scalar(text("SELECT 1")) == 1
+        eng.dispose()
+    finally:
+        with store.begin() as c:
+            c.execute(text(f"DROP ROLE IF EXISTS {name}"))  # noqa: S608
+
+
+@pytest.mark.parametrize(
+    "pw", ["short", "has space 12345", "q'uote_12345", "x" * 65, "ünïcode_1234"]
+)
+def test_dev_login_rejects_bad_password_without_echo(store: Engine, pw: str) -> None:
+    with store.begin() as c, pytest.raises(ValueError) as e:
+        ensure_dev_login(c, "wb_dev_never", pw)
+    assert pw not in str(e.value)
+
+
+def test_dev_login_rejects_bad_name(store: Engine) -> None:
+    with store.begin() as c, pytest.raises(ValueError):
+        ensure_dev_login(c, "x; DROP ROLE y", "good_pw_1234")

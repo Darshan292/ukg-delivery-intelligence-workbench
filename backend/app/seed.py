@@ -7,9 +7,11 @@ the same rules as real data.
 """
 
 import hashlib
+import os
+import re
 from datetime import UTC, datetime
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, select, text
 
 from app import models
 from app.config import get_settings
@@ -128,9 +130,30 @@ def seed_tracer_graph(conn: Connection) -> None:
     save(conn, build_tracer_records())
 
 
+_NAME = re.compile(r"^[a-z][a-z0-9_]{2,40}$")
+_PASSWORD = re.compile(r"^[A-Za-z0-9_]{8,64}$")
+
+
+def ensure_dev_login(conn: Connection, name: str, password: str) -> None:
+    """DEV ONLY: a LOGIN member of wb_review for the API, so it never runs as the owner.
+
+    Both values are validated by pattern and then inlined (DDL takes no bind parameters).
+    Errors never contain the values.
+    """
+    if not _NAME.fullmatch(name) or not _PASSWORD.fullmatch(password):
+        raise ValueError("dev login: invalid name or password format")
+    exists = conn.scalar(text("SELECT 1 FROM pg_roles WHERE rolname = :n"), {"n": name})
+    if exists:
+        conn.execute(text(f"ALTER ROLE {name} LOGIN PASSWORD '{password}'"))  # noqa: S608
+    else:
+        conn.execute(text(f"CREATE ROLE {name} LOGIN PASSWORD '{password}' IN ROLE wb_review"))  # noqa: S608
+
+
 if __name__ == "__main__":
     engine = create_db_engine(get_settings().database_url.get_secret_value())
     with engine.begin() as c:
         seed_tracer_graph(c)
+        if pw := os.environ.get("DEV_APP_DB_PASSWORD"):
+            ensure_dev_login(c, "wb_api_dev", pw)
     engine.dispose()
     print("seeded")

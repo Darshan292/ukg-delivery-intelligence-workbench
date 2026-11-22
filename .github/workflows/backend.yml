@@ -78,12 +78,15 @@ jobs:
         working-directory: .
       - run: uv run --frozen --no-dev alembic upgrade head
       - run: uv run --frozen --no-dev alembic upgrade head # idempotent
-      - name: Assert tables exist
+      - name: Assert D3 tables and roles exist
         working-directory: .
         run: |
           tables=$(docker compose exec -T db psql -U tracer -d tracer -tAc \
-            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('entity','relationship','evidence_locator')")
+            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('actor','relationship','review_event')")
           test "$tables" = "3"
+          roles=$(docker compose exec -T db psql -U tracer -d tracer -tAc \
+            "select count(*) from pg_roles where rolname in ('wb_ingest','wb_review')")
+          test "$roles" = "2"
       - name: Down
         if: always()
         working-directory: .

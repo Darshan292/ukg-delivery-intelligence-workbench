@@ -1,7 +1,7 @@
-# Backend (tracer scaffold)
+# Backend
 
 FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic, sync, pg8000 driver. Fictional data only.
-The schema is a tracer subset that Slice 1 replaces.
+The schema is the D3 model (relationship-model rev 2.1), created by migration 0002.
 
 ## Setup
 
@@ -33,3 +33,18 @@ The schema is a tracer subset that Slice 1 replaces.
 ## Migrations
 
     DATABASE_URL=postgresql+pg8000://tracer:tracer@127.0.0.1:5432/tracer uv run alembic upgrade head
+
+## Database roles and review
+
+- Two URLs. The **owner** (`tracer` in dev) runs `alembic upgrade head` and `python -m app.seed`
+  and owns every table. The **API** connects as a member of the group role `wb_review`
+  (`wb_api_dev` in dev; `scripts/dev.sh` creates it). `wb_ingest` is the ingestion role.
+  Migration 0002 creates both group roles; login members are created by `dev.sh` and by the
+  test fixtures. Migration 0002 is not downgradable: drop and recreate a dev database after
+  editing it.
+- Only a human reviewer can accept or reject: privileges, constraint triggers and the API all
+  check it (triggers raise SQLSTATE `WB002`; append-only is `WB001`; other model rules `WB003`).
+- Review is **off by default**. To enable it for a local demo, set `REVIEWER_TOKEN` (32+
+  characters) and `REVIEWER_ACTOR_ID` (2 is the seeded fictional reviewer), then send
+  `Authorization: Bearer <token>`. The actor comes from the server setting, never the body.
+- Tests connect as the app roles, not the owner, so a missing grant fails a test.
