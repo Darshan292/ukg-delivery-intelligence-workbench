@@ -233,3 +233,41 @@ class Claim(Record):
     def dedup_key(self) -> tuple[int, str, str, str, tuple[int, ...]]:
         # RM e; the locator_set_hash is a Slice 5 storage detail, the sorted tuple is the key here
         return (self.relationship_id, self.basis, self.method, self.polarity, self.locator_ids)
+
+
+class _EventBase(Record):
+    id: Id
+    at: AwareDatetime
+    actor_id: Id
+
+
+class ClaimReviewEvent(_EventBase):
+    target_kind: Literal["claim"]
+    claim_id: Id
+    verdict: Literal["rejected", "reinstated"]
+    reason: NonBlank
+
+
+class RelationshipReviewEvent(_EventBase):
+    target_kind: Literal["relationship"]
+    relationship_id: Id
+    scope_snapshot_id: Id | None
+    verdict: Literal["accepted", "rejected", "superseded"]
+    reason: NonBlank | None = None
+    successor_relationship_id: Id | None = None
+
+    @model_validator(mode="after")
+    def _verdict_rules(self) -> Self:
+        if self.verdict != "accepted" and self.reason is None:
+            raise ValueError("review: reason required for every verdict except accepted")
+        if (self.verdict == "superseded") != (self.successor_relationship_id is not None):
+            raise ValueError("review: successor required for, and only for, superseded")
+        if self.successor_relationship_id == self.relationship_id:
+            raise ValueError("review: successor cannot be the relationship itself")
+        return self
+
+
+# One id space for both kinds (one table in Slice 5); ordering key is (at, id).
+ReviewEvent = Annotated[
+    ClaimReviewEvent | RelationshipReviewEvent, Field(discriminator="target_kind")
+]
