@@ -12,6 +12,8 @@ dependencies = [
     "sqlalchemy>=2",
     "alembic",
     "pg8000",
+    "openpyxl>=3.1.5,<3.2",
+    "defusedxml>=0.7.1,<0.8",
 ]
 
 [dependency-groups]
@@ -22,6 +24,8 @@ dev = [
     "pytest-postgresql",  # LGPL, dev only (pulls psycopg)
     "ruff",
     "pyright",
+    "types-openpyxl>=3.1.5.20261122",
+    "types-defusedxml>=0.7.0.20260504",
 ]
 
 [tool.uv]
