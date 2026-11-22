@@ -3,14 +3,14 @@
 """Licence gate for dependency licences (stdlib only). Fails closed.
 
 ALLOW: MIT, BSD (2/3-clause), Apache-2.0, ISC, PSF, MPL-2.0, 0BSD, Unlicense,
-CC0-1.0, Python-2.0, Zlib, BlueOak-1.0.0.
+CC0-1.0, Python-2.0, Zlib, BlueOak-1.0.0, MIT-CMU.
 DEV-ONLY: LGPL (any version); passes only with --dev.
 DENY: GPL, AGPL, SSPL, BSL/BUSL, any "non-commercial" licence, and anything
 blank, UNKNOWN, "SEE LICENSE IN ..." or not recognised.
 
 SPDX expressions: `A OR B` passes if either side does; `A AND B` only if both
-do; `X WITH exception` is judged on X. Several PyPI classifiers joined by ";"
-and npm licence arrays are treated as AND (the conservative reading).
+do; `X WITH exception` is judged on X. Several PyPI classifiers joined by ";" or
+",", and npm licence arrays, are treated as AND (the conservative reading).
 
 Exceptions: licence-exceptions.toml (repo root) lists owner-approved packages
 by exact name, version range (">=a,<b"; numeric dotted versions only) and the
@@ -42,7 +42,7 @@ _DEV_ONLY = re.compile(r"\blgpl|lesser general public|library general public")
 _ALLOW = re.compile(
     r"^(mit([- ]0)?( license)?|bsd([- ].*)?|apache([- ].*)?|isc( license.*)?|psf([- ].*)?"
     r"|python software foundation.*|python-2\.0.*|mpl[- ]2\.0.*|mozilla public license 2\.0.*"
-    r"|0bsd|blueoak-1\.0\.0|unlicense|the unlicense.*|cc0-1\.0|zlib( license)?)$"
+    r"|0bsd|blueoak-1\.0\.0|mit-cmu|cmu license|unlicense|the unlicense.*|cc0-1\.0|zlib( license)?)$"
 )
 _TOKENS = re.compile(r"(\(|\)|\s+AND\s+|\s+OR\s+|\s+WITH\s+)")
 
@@ -105,7 +105,9 @@ class _Parser:
 
 
 def classify(license_text: str) -> Verdict:
-    parts = [p for p in license_text.split(";") if p.strip()] or [""]
+    # Comma lists are judged part by part (AND), like ";"; ", Version 2.0" belongs to its licence.
+    text = re.sub(r",\s*(?=version\b)", " ", license_text, flags=re.IGNORECASE)
+    parts = [p for p in re.split(r"[;,]", text) if p.strip()] or [""]
     verdicts: list[Verdict] = []
     for part in parts:
         if re.search(r"\s(AND|OR|WITH)\s", part):

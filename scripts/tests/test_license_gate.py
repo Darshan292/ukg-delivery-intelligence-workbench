@@ -273,3 +273,25 @@ def test_npm_lock_covers_every_platform(tmp_path: Path) -> None:
     assert [p["name"] for p in run] == ["a", "@x/win-only"]
     assert len(dev) == 3
     assert run_cli("--npm-lock", str(f)).returncode == 1  # the win32-only GPL package is caught on Linux too
+
+
+@pytest.mark.parametrize("text", ["MIT-CMU", "CMU License"])
+def test_mit_cmu_allowed(text: str) -> None:  # owner decision 2026-11-22 (2): OSI-approved
+    assert lg.classify(text) == "allow"
+    assert lg.check([pkg(text, "pillow")], dev=False) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["BSD-3-Clause, Apache-2.0, dependency licenses", "Apache-2.0, see bundled notices", "MIT, GPL-3.0"],
+)
+def test_comma_list_is_judged_part_by_part(text: str) -> None:  # was passed by the bsd/apache prefix pattern
+    assert lg.classify(text) == "deny"
+
+
+def test_comma_list_of_allowed_licences_passes() -> None:
+    assert lg.classify("BSD-3-Clause, Apache-2.0") == "allow"
+
+
+def test_version_after_comma_is_not_a_separate_licence() -> None:
+    assert lg.classify("Apache License, Version 2.0") == "allow"
