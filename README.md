@@ -8,7 +8,30 @@ An open-source tool for UKG implementation, migration and support practitioners 
 
 ## Status
 
-**Pre-alpha. No application code yet.** The research and architecture are done, and Step 1 (scaffold, CI and a three-node tracer bullet) starts next. Nothing in this repository has been measured for accuracy, speed or time saved, and no such claims are made.
+**Pre-alpha.** The backend and frontend scaffolds and a three-node tracer bullet exist: it shows stored links around one fictional entity, each with its source locator. It is not impact analysis and its locators are fake. Nothing in this repository has been measured for accuracy, speed or time saved, and no such claims are made.
+
+## Quick start (about 5 minutes)
+
+Prerequisites: Docker, [uv](https://docs.astral.sh/uv/), Node 22 or newer, and make.
+
+```bash
+git clone https://github.com/Darshan292/ukg-delivery-intelligence-workbench   # the repository may be renamed
+cd ukg-delivery-intelligence-workbench
+make dev
+```
+
+`make dev` starts Postgres in Docker, applies the migrations, loads the fictional seed data, then runs the API on port 8000 and the web app on port 3000. Open <http://127.0.0.1:3000>. Ctrl-C stops the servers (`make db-down` stops the database).
+
+You should see a FICTIONAL banner, a graph of three fictional entities (`REQ-T1`, `RULE-T1`, `TEST-T1`) and a list of two links. Click a link, in the list or on the graph, to see the source locator it came from.
+
+| Command | What it does |
+|---|---|
+| `make dev-local` | Same as `make dev`, with a throwaway local Postgres (`scripts/pg-local.sh`) for machines without Docker |
+| `make test` | Backend pytest and frontend vitest |
+| `make lint` | ruff, pyright, eslint and tsc |
+| `make e2e` | Starts the stack, runs the Playwright browser tests, tears everything down |
+
+**What this is not:** the tracer bullet shows stored links only. It is not impact analysis, and it uses fake locators and fictional data.
 
 ## Where to start reading
 
