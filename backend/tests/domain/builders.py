@@ -51,6 +51,11 @@ CATALOGUE = Catalogue(
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
+def _num(v: JsonScalar | int) -> JsonScalar:
+    """Test convenience: plain ints become Decimal (the model accepts no int or float)."""
+    return Decimal(v) if isinstance(v, int) and not isinstance(v, bool) else v
+
+
 class World:
     def __init__(self) -> None:
         self._ids: dict[str, int] = {}
@@ -219,7 +224,9 @@ class World:
         self.claims.append(c)
         return c
 
-    def version(self, entity: Entity, dv: DocumentVersion, **attrs: JsonScalar) -> EntityVersion:
+    def version(
+        self, entity: Entity, dv: DocumentVersion, **attrs: JsonScalar | int
+    ) -> EntityVersion:
         loc = self.locator(dv)
         ev = EntityVersion(
             id=self._id("entity_version"),
@@ -227,7 +234,7 @@ class World:
             document_version_id=dv.id,
             snapshot_id=dv.snapshot_id,
             attributes=tuple(
-                Attribute(name=k, value=v, locator_id=loc.id) for k, v in attrs.items()
+                Attribute(name=k, value=_num(v), locator_id=loc.id) for k, v in attrs.items()
             ),
             locator_ids=(loc.id,),
         )

@@ -161,3 +161,45 @@ def test_unscoped_relationship_never_gets_documentary_only(fx: Fx) -> None:
     fx.w.claim(impl, fx.d)
     fx.w.version(fx.a, fx.e1, x=1)
     assert fx.kinds() == []
+
+
+class Fx2:
+    """Source Z with single-valued `uses` to A and to B; A same_as B."""
+
+    def __init__(self, w: World) -> None:
+        self.w = w
+        self.s1 = w.snapshot("s1")
+        self.d = w.design()
+        z = w.entity("cfg", "Z")
+        a, b = w.entity("cfg", "A"), w.entity("cfg", "B")
+        w.claim(w.rel("uses", z, a), self.d)
+        w.claim(w.rel("uses", z, b), self.d)
+        self.same = w.rel("same_as", a, b)
+
+    def kinds(self) -> list[str]:
+        return [c.kind for c in conflicts(self.w.build(), self.s1.id)]
+
+
+def test_cardinality_collapses_accepted_same_as_cluster(world: World) -> None:
+    f = Fx2(world)
+    world.accept(f.same, f.s1)
+    assert f.kinds() == []
+
+
+def test_cardinality_does_not_collapse_unreviewed_same_as(world: World) -> None:
+    f = Fx2(world)
+    world.claim(f.same, f.d)
+    assert f.kinds() == ["cardinality"]
+
+
+def test_cardinality_does_not_collapse_rejected_same_as(world: World) -> None:
+    f = Fx2(world)
+    world.reject(f.same, f.s1)
+    assert f.kinds() == ["cardinality"]
+
+
+def test_cardinality_does_not_collapse_superseded_same_as(world: World) -> None:
+    f = Fx2(world)
+    other = world.rel("same_as", world.entities[1], world.entity("cfg", "C"))
+    world.supersede(f.same, f.s1, other)
+    assert f.kinds() == ["cardinality"]
