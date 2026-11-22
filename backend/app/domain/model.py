@@ -41,7 +41,6 @@ Polarity = Literal["present", "absent"]
 NonBlank = Annotated[str, StringConstraints(min_length=1, pattern=r"\S")]
 Versioned = Annotated[str, StringConstraints(pattern=r"^[^@\s]+@[^@\s]+$")]  # name@version
 SAME_AS: Final = "same_as"
-KEY_NORMALISATION: Final = "v1"
 
 
 def normalise_key_v1(raw: str) -> str:

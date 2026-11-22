@@ -251,10 +251,14 @@ def _cluster_parts(
     return sorted(out, key=lambda t: t[0])
 
 
+_Parts = list[tuple[list[int], list[int]]]
+
+
 def identity_clusters(
-    r: Records, s: int, states: dict[int, EdgeState] | None = None
+    r: Records, s: int, states: dict[int, EdgeState] | None = None, parts: _Parts | None = None
 ) -> tuple[Cluster, ...]:
     states = edge_states(r, s) if states is None else states
+    parts = _cluster_parts(r, s, states) if parts is None else parts
     return tuple(
         Cluster(
             member_ids=tuple(members),
@@ -262,7 +266,7 @@ def identity_clusters(
             # owner question Q13 (pending): only a rejected same_as inside a cluster conflicts
             conflicted=any(states[i].state == "rejected" for i in inside),
         )
-        for members, inside in _cluster_parts(r, s, states)
+        for members, inside in parts
     )
 
 
@@ -271,9 +275,9 @@ def _same_value(a: JsonScalar, b: JsonScalar) -> bool:
     return (type(a) is bool) == (type(b) is bool) and a == b
 
 
-def _identity_conflicts(r: Records, s: int, states: dict[int, EdgeState]) -> list[Conflict]:
+def _identity_conflicts(s: int, states: dict[int, EdgeState], parts: _Parts) -> list[Conflict]:
     out: list[Conflict] = []
-    for members, inside in _cluster_parts(r, s, states):
+    for members, inside in parts:
         if any(states[i].state == "rejected" for i in inside):
             out.append(
                 Conflict(
@@ -320,10 +324,11 @@ def _attribute_conflicts(r: Records, s: int) -> list[Conflict]:
 
 
 def conflicts(
-    r: Records, s: int, states: dict[int, EdgeState] | None = None
+    r: Records, s: int, states: dict[int, EdgeState] | None = None, parts: _Parts | None = None
 ) -> tuple[Conflict, ...]:
     states = edge_states(r, s) if states is None else states
-    found = _edge_conflicts(r, s, states) + _identity_conflicts(r, s, states)
+    parts = _cluster_parts(r, s, states) if parts is None else parts
+    found = _edge_conflicts(r, s, states) + _identity_conflicts(s, states, parts)
     return tuple(sorted(found + _attribute_conflicts(r, s), key=_sort_key))
 
 
@@ -348,7 +353,8 @@ class Evaluation(Record):
 
 def evaluate(r: Records, s: int) -> Evaluation:
     states = edge_states(r, s)
-    found = conflicts(r, s, states)
+    parts = _cluster_parts(r, s, states)
+    found = conflicts(r, s, states, parts)
     views: list[EdgeView] = []
     for rel_id in sorted(states):
         st = states[rel_id]
@@ -377,5 +383,5 @@ def evaluate(r: Records, s: int) -> Evaluation:
         snapshot_id=s,
         edges=tuple(views),
         conflicts=found,
-        clusters=identity_clusters(r, s, states),
+        clusters=identity_clusters(r, s, states, parts),
     )
