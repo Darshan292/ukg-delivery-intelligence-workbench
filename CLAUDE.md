@@ -39,6 +39,7 @@ Whether the product is a "competitive product" is for independent legal review (
 
 ## How we work
 
+- Every PR description names the mutations or failure cases its tests catch (for example, "replacing `Decimal(repr(v))` with `Decimal(v)` fails `test_...`"), and shows that the new tests fail against that planted bug. The owner spot-checks by planting bugs.
 - Process: superpowers. Plan with `writing-plans`, build with `test-driven-development`, finish with `verification-before-completion`. Use `brainstorming` only for genuinely open design questions.
 - Solution size: ponytail. When the two pull different ways, superpowers decides the process and the tests; ponytail decides how much code. Ponytail never removes tests, validation, provenance or security.
 - Docs: use Context7 for current framework docs when it is connected; otherwise read the official docs and note the version checked.
