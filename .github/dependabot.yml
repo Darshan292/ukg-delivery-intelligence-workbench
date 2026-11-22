@@ -16,6 +16,10 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # TypeScript is pinned to 6.x (CLAUDE.md): TypeScript 7 has no tsserver, which the LSP tooling needs.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -23,4 +27,12 @@ updates:
     open-pull-requests-limit: 5
     groups:
       actions-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      docker-minor-patch:
         update-types: [minor, patch]
