@@ -23,7 +23,7 @@ ALPHABET = st.sampled_from([*SPACES, *EXTRA, "a", "@", "Z", "9"])
 GOOD = st.sampled_from(["a", "k1", "x y"])  # keeps plenty of valid rows in the mix
 TEXT = st.one_of(st.text(max_size=6), st.text(alphabet=ALPHABET, max_size=6), GOOD, GOOD)
 VERS = st.one_of(  # name@version
-    TEXT, st.builds(lambda a, b: f"{a}@{b}", TEXT, TEXT), st.just("a@1")
+    TEXT, st.tuples(TEXT, TEXT).map(lambda t: f"{t[0]}@{t[1]}"), st.just("a@1")
 )
 IDS = st.sampled_from([-1, 0, 500])
 
