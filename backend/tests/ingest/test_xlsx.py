@@ -294,3 +294,9 @@ def test_post_load_check_is_independent_of_the_prescan(monkeypatch: pytest.Monke
     _rejects(
         workbook_bytes(many), "sheet_too_large", Limits(sheet_max_cells=1000, workbook_max_cells=10)
     )
+
+
+def test_openpyxl_failure_maps_to_workbook_malformed() -> None:
+    _rejects(
+        _hand('<row r="1"><c r="A1" t="n"><v>not-a-number</v></c></row>'), "workbook_malformed"
+    )
