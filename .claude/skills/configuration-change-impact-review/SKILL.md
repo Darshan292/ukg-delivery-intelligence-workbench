@@ -7,7 +7,7 @@ description: Deterministic impact analysis for configuration changes. Use whenev
 
 Engineers use this to decide whether a change can go to a customer. A missed impact means a payroll or integration incident; a false "safe" is the worst output this product can produce. So the analysis is deterministic, directional, explainable path by path, and honest about what it cannot see.
 
-The full semantics, including the change and deletion rules for every relationship type, are in `docs/architecture/impact-propagation.md` (rev 2). The claim, review and edge-tier model is in `docs/architecture/relationship-model.md` (rev 2). Both are binding (decisions D3 and D4 approved 2026-11-20). Read both before changing traversal code; if this skill and those documents disagree, fix the disagreement.
+The full semantics, including the change and deletion rules for every relationship type, are in `docs/architecture/impact-propagation.md` (rev 2.1). The claim, review and edge-tier model is in `docs/architecture/relationship-model.md` (rev 2.1). Both are binding (decisions D3 and D4 approved 2026-11-20; clarified by `docs/decisions/0002-oracle-rule-clarifications.md`). Read both before changing traversal code; if this skill and those documents disagree, fix the disagreement.
 
 ## Determinism
 
@@ -16,12 +16,12 @@ The full semantics, including the change and deletion rules for every relationsh
 
 ## Method
 
-1. **Derive the change set by diffing two snapshots** (entities added, removed or modified with field-level changes, plus links added or removed). Never accept a hand-typed change description as the seed. Attribute values come only from the snapshot's authoritative export. A seed inherits the tier of the link or attribute conflict that created it.
-2. **Traverse directionally.** Follow only edge types whose propagation rule carries a change in the direction of travel. Reachability in an undirected graph is not impact. Edge types without a rule are not traversed; they are reported as boundaries. Skip rejected and superseded edges. Detect cycles; enforce a depth limit and report cut-offs.
-3. **Sort results into six kinds**, never merged:
+1. **Derive the change set by diffing two snapshots** (entities added, removed or modified with field-level changes, plus links added or removed). Never accept a hand-typed change description as the seed. Attribute values come only from the snapshot's authoritative export. A seed inherits the tier of the link or attribute conflict that created it. A removed link seeds its holder (stored source) with the link's *before*-state tier and applies the "delete source" rule to that link only, with effects on the target.
+2. **Traverse directionally.** Follow only edge types whose propagation rule carries a change in the direction of travel. Reachability in an undirected graph is not impact. Edge types without a rule are not traversed; they are reported as boundaries. Skip rejected, superseded and unsupported edges. Depth limit 6: a node first reachable only at hop 7 is reported as a depth cut-off. Tier by two breadth-first passes: established edges from established seeds, then all non-excluded edges from all seeds; nodes found only in the second pass are *possible*. List paths and counts exactly as the propagation document defines them.
+3. **Sort results into six kinds**, never merged, in this order:
    - *Impact candidates*: modelled objects whose behaviour or output may change. Traversal continues only through these.
-   - *Re-validation tasks*: work items (re-run a test, update a hard-coded expected value, recheck a requirement or mapping row). They are not impacts, and traversal stops there.
-   - *Coverage gaps*: absences, such as an affected requirement or integration with no live test link. They are evaluated only for affected objects, not the whole graph.
+   - *Re-validation tasks*: work items on any object (re-run a test, update a hard-coded expected value, recheck a requirement, mapping row or configuration object). They are not impacts, and traversal stops there.
+   - *Coverage gaps*: absences, such as an affected requirement or integration with no live test link. They are evaluated only for affected objects, not the whole graph, and only in the `after` snapshot.
    - *Upstream constraints*: one hop against propagation from each seed. They constrain the change; they are not impacted.
    - *Context*: non-propagating links (documents, past defects, documentation mismatches).
    - *Not modelled / boundaries*: unparsed sources, `unknown` profile, untyped edges, dangling references, external systems, depth cut-offs.
@@ -40,10 +40,10 @@ Passing tests only prove the behaviour those tests check. Never declare a change
 Change set (from snapshot diff): <object.attribute: before → after>
 Impact candidates — established: <node> via <path>  (evidence refs)
 Impact candidates — possible:    <node> via <path>  (weakest edge: <basis>, <method>, confidence <x>; conflict: <kind>)
-Re-validation tasks:             <test / requirement / mapping row>: <re-run | update expected value old → new | recheck>  (tier)
+Re-validation tasks:             <test / requirement / mapping row / configuration object>: <re-run | update expected value old → new | recheck>  (tier)
+Coverage gaps:                   <requirement or integration> has no live test link
 Upstream constraints:            <node> (<relationship>)
 Context:                         <document / defect> on <node>
-Coverage gaps:                   <requirement or integration> has no live test link
 Not modelled / boundaries:       <what the analysis could not see, and why>
 ```
 
