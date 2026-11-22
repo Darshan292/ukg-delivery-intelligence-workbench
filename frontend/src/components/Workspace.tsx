@@ -5,14 +5,14 @@
 
 import { useEffect, useState } from "react";
 
-import { fetchImpact } from "@/lib/api";
-import type { ImpactResponse } from "@/lib/types";
+import { fetchNeighbourhood } from "@/lib/api";
+import type { NeighbourhoodResponse } from "@/lib/types";
 import { EdgeList } from "./EdgeList";
 import { EvidencePanel } from "./EvidencePanel";
 import { GraphView } from "./GraphView";
 import { StatePanel } from "./StatePanel";
 
-type Result = { entity: string; data?: ImpactResponse; error?: string };
+type Result = { entity: string; data?: NeighbourhoodResponse; error?: string };
 
 export function Workspace({ entity }: { entity: string }) {
   const [result, setResult] = useState<Result>();
@@ -20,7 +20,7 @@ export function Workspace({ entity }: { entity: string }) {
 
   useEffect(() => {
     const ctl = new AbortController();
-    fetchImpact(entity, ctl.signal)
+    fetchNeighbourhood(entity, ctl.signal)
       .then((data) => setResult({ entity, data }))
       .catch((e: unknown) => {
         if (!ctl.signal.aborted) setResult({ entity, error: e instanceof Error ? e.message : "Something went wrong. Reload the page." });

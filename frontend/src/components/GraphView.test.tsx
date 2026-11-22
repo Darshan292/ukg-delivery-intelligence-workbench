@@ -4,8 +4,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import fixture from "@/lib/__fixtures__/impact.json";
-import type { ImpactResponse } from "@/lib/types";
+import fixture from "@/lib/__fixtures__/neighbourhood.json";
+import type { NeighbourhoodResponse } from "@/lib/types";
 import { GraphView } from "./GraphView";
 
 // Capture what GraphView hands to React Flow; jsdom cannot lay it out.
@@ -28,7 +28,7 @@ function mockMedia(matches: boolean) {
 }
 
 const renderIt = () =>
-  render(<GraphView data={fixture as ImpactResponse} selectedId={undefined} onSelect={() => {}} />);
+  render(<GraphView data={fixture as NeighbourhoodResponse} selectedId={undefined} onSelect={() => {}} />);
 
 describe("GraphView orientation", () => {
   it("is vertical when the narrow media query matches", () => {

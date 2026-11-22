@@ -22,7 +22,7 @@ export type GraphEdge = {
   locator: LocatorOut;
 };
 
-export type ImpactResponse = {
+export type NeighbourhoodResponse = {
   entity: string;
   fictional: true;
   notice: string;

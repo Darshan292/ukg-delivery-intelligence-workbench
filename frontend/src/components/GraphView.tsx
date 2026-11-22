@@ -9,7 +9,7 @@ import { Handle, MarkerType, Position, ReactFlow, type Edge, type NodeProps, typ
 import { useMemo, useSyncExternalStore } from "react";
 
 import { toFlow, VSTEP, type NodeData, type Orientation } from "@/lib/graph";
-import type { ImpactResponse } from "@/lib/types";
+import type { NeighbourhoodResponse } from "@/lib/types";
 
 function EntityNode({ data }: NodeProps & { data: NodeData }) {
   return (
@@ -48,7 +48,7 @@ export function GraphView({
   selectedId,
   onSelect,
 }: {
-  data: ImpactResponse;
+  data: NeighbourhoodResponse;
   selectedId: string | undefined;
   onSelect: (id: string) => void;
 }) {

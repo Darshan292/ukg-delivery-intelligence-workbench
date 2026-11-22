@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_session
 from app.logging_config import configure_logging
-from app.routes.impact import router as impact_router
+from app.routes.neighbourhood import router as neighbourhood_router
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
             return JSONResponse({"status": "unavailable"}, status_code=503)
         return JSONResponse({"status": "ready"})
 
-    app.include_router(impact_router)
+    app.include_router(neighbourhood_router)
 
     @app.exception_handler(RequestValidationError)
     async def _invalid(_: Request, exc: RequestValidationError) -> JSONResponse:

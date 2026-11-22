@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 services:
   db:
-    image: postgres:16
+    # Pinned by digest (16.16); Dependabot (docker-compose ecosystem) proposes updates.
+    image: postgres:16.16@sha256:3950ad7c3148ca2175ef1b6c36c9efbf78957ae8fbe8b3a5d7c35af50500382f
     environment:
       # Dev-only credentials for a throwaway local database. Never reuse them anywhere real.
       POSTGRES_USER: tracer
