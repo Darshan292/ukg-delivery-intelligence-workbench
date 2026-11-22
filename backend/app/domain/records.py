@@ -269,7 +269,8 @@ def _catalogue(r: Records) -> None:
     for rel in r.relationships:
         profile = r.relationship_profile(rel)
         if profile == "unknown":
-            # owner question Q7 (pending): unknown-to-unknown edges rejected (no catalogue to type them)  # noqa: E501
+            # owner question Q7 (pending): unknown-to-unknown edges rejected
+            # (no catalogue to type them)
             raise _fail("catalogue: relationship between unknown entities", "relationship", rel.id)
         cat = r.catalogue_by_profile.get(profile)
         spec = (
