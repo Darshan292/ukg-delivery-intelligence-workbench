@@ -147,3 +147,32 @@ def test_sorted_unique_id_tuples() -> None:
     assert ev(locator_ids=(3, 1)).locator_ids == (1, 3)
     with pytest.raises(ValidationError):
         ev(locator_ids=(1, 1))
+
+
+def test_unknown_profile_reference_validates_and_has_no_relationship() -> None:
+    from app.domain.records import Records
+    from tests.domain.builders import CATALOGUE
+
+    s_e = Entity(id=1, product_profile="synthetic", entity_type="cfg", natural_key="A")
+    from app.domain.locators import XlsxCell
+    from app.domain.model import Actor, Document, DocumentVersion
+
+    actor = Actor(id=1, kind="service", display_name="S", roles=frozenset())
+    doc = Document(id=1, product_profile="synthetic", title="d")
+    dv = DocumentVersion(
+        id=1, document_id=1, sha256="a" * 64, snapshot_id=None,
+        supersedes_version_id=None, declared_by=1, uploaded_at=T,
+    )  # fmt: skip
+    loc = XlsxCell(
+        id=1, document_version_id=1, snippet="x", extractor="e@1", extracted_at=T,
+        kind="xlsx_cell", sheet="S", cell="A1",
+    )  # fmt: skip
+    ref = UnresolvedReference(
+        id=1, holder_entity_id=1, raw_reference="r", locator_id=1, reason="unknown_profile"
+    )
+    r = Records(
+        catalogues=(CATALOGUE,), actors=(actor,), documents=(doc,), document_versions=(dv,),
+        locators=(loc,), entities=(s_e,), unresolved_references=(ref,),
+    )  # fmt: skip
+    assert r.relationships == ()
+    assert r.unresolved_references[0].reason == "unknown_profile"

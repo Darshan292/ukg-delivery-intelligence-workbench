@@ -175,7 +175,7 @@ class UnresolvedReference(Record):
     holder_entity_id: Id
     raw_reference: NonBlank
     locator_id: Id
-    reason: Literal["missing_target", "uncatalogued_type"]
+    reason: Literal["missing_target", "uncatalogued_type", "unknown_profile"]
 
 
 class EntityTypeSpec(Record):
