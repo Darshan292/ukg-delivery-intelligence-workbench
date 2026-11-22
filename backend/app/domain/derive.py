@@ -9,9 +9,12 @@ from typing import Literal
 
 from app.domain.model import (
     BASIS_RANK,
+    SAME_AS,
     Basis,
     Claim,
+    EntityVersion,
     Id,
+    JsonScalar,
     Record,
     RelationshipReviewEvent,
     SortedIds0,
@@ -201,8 +204,118 @@ def _edge_conflicts(r: Records, s: int, states: dict[int, EdgeState]) -> list[Co
     return out
 
 
+class Cluster(Record):
+    member_ids: tuple[Id, ...]  # ordered by natural key
+    representative_id: Id  # smallest key (RM g)
+    conflicted: bool
+
+
+def _cluster_parts(
+    r: Records, s: int, states: dict[int, EdgeState]
+) -> list[tuple[list[int], list[int]]]:
+    """(member ids, same_as relationship ids inside) per cluster of size >= 2, members by key."""
+    parent: dict[int, int] = {}
+
+    def find(x: int) -> int:
+        while parent.setdefault(x, x) != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    same = [
+        r.relationship_by_id[i] for i in sorted(states) if r.relationship_by_id[i].type == SAME_AS
+    ]
+    for rel in same:
+        if states[rel.id].state == "accepted":
+            parent[find(rel.source_entity_id)] = find(rel.target_entity_id)
+    groups: dict[int, list[int]] = {}
+    for e in list(parent):
+        groups.setdefault(find(e), []).append(e)
+    out: list[tuple[list[int], list[int]]] = []
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda i: r.entity_by_id[i].natural_key)
+        inside = [
+            rel.id
+            for rel in same
+            if rel.source_entity_id in members and rel.target_entity_id in members
+        ]
+        out.append((members, inside))
+    return sorted(out, key=lambda t: t[0])
+
+
+def identity_clusters(
+    r: Records, s: int, states: dict[int, EdgeState] | None = None
+) -> tuple[Cluster, ...]:
+    states = edge_states(r, s) if states is None else states
+    return tuple(
+        Cluster(
+            member_ids=tuple(members),
+            representative_id=members[0],
+            # owner question Q13 (pending): only a rejected same_as inside a cluster conflicts
+            conflicted=any(states[i].state == "rejected" for i in inside),
+        )
+        for members, inside in _cluster_parts(r, s, states)
+    )
+
+
+def _same_value(a: JsonScalar, b: JsonScalar) -> bool:
+    # owner question Q10 (pending): bool never equals a number; 40 == 40.0
+    return (type(a) is bool) == (type(b) is bool) and a == b
+
+
+def _identity_conflicts(r: Records, s: int, states: dict[int, EdgeState]) -> list[Conflict]:
+    out: list[Conflict] = []
+    for members, inside in _cluster_parts(r, s, states):
+        if any(states[i].state == "rejected" for i in inside):
+            out.append(
+                Conflict(
+                    kind="identity",
+                    snapshot_id=s,
+                    relationship_ids=tuple(sorted(inside)),
+                    entity_ids=tuple(sorted(members)),
+                )
+            )
+    return out
+
+
+def _attribute_conflicts(r: Records, s: int) -> list[Conflict]:
+    # owner question Q10 (pending): superseded versions excluded; an attribute in one version
+    # only is no conflict; display-only attributes are never conflicts (uncatalogued = semantic)
+    profile = r.snapshot_by_id[s].product_profile
+    by_entity: dict[int, list[EntityVersion]] = {}
+    for ev in r.entity_versions:
+        if ev.snapshot_id == s and ev.document_version_id not in r.superseded_version_ids:
+            ent = r.entity_by_id[ev.entity_id]
+            if ent.product_profile in (profile, "unknown"):
+                by_entity.setdefault(ev.entity_id, []).append(ev)
+    out: list[Conflict] = []
+    for ent_id, evs in by_entity.items():
+        spec = r.entity_spec(r.entity_by_id[ent_id])
+        display = spec.display_only_attributes if spec else ()
+        seen: dict[str, list[tuple[int, JsonScalar]]] = {}
+        for ev in evs:
+            for a in ev.attributes:
+                if a.name not in display:
+                    seen.setdefault(a.name, []).append((ev.id, a.value))
+        for name, vals in seen.items():
+            if len(vals) >= 2 and any(not _same_value(vals[0][1], v) for _, v in vals[1:]):
+                out.append(
+                    Conflict(
+                        kind="attribute",
+                        snapshot_id=s,
+                        entity_ids=(ent_id,),
+                        entity_version_ids=tuple(sorted(i for i, _ in vals)),
+                        attribute=name,
+                    )
+                )
+    return out
+
+
 def conflicts(
     r: Records, s: int, states: dict[int, EdgeState] | None = None
 ) -> tuple[Conflict, ...]:
     states = edge_states(r, s) if states is None else states
-    return tuple(sorted(_edge_conflicts(r, s, states), key=_sort_key))
+    found = _edge_conflicts(r, s, states) + _identity_conflicts(r, s, states)
+    return tuple(sorted(found + _attribute_conflicts(r, s), key=_sort_key))
