@@ -7,9 +7,7 @@ Pure and in-memory: nothing is returned on rejection, so there are no partial re
 
 import hashlib
 import logging
-import zipfile
 from datetime import datetime
-from io import BytesIO
 from typing import Literal, Self
 
 from pydantic import SkipValidation, ValidationError, model_validator
@@ -21,9 +19,6 @@ from app.ingest.fragments import ParsedDocument
 from app.ingest.xlsx import parse_xlsx
 
 log = logging.getLogger(__name__)
-
-_XLSX_MAIN = b"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
-_SNIFF_CAP = 1 << 20  # [Content_Types].xml is tiny; never read more than this to sniff
 
 
 class Ingested(Record):
@@ -56,13 +51,9 @@ def sniff_kind(data: bytes) -> Literal["xlsx", "pdf"]:
     if data.startswith(b"%PDF-"):
         return "pdf"
     if data.startswith(b"PK\x03\x04"):
-        try:
-            with zipfile.ZipFile(BytesIO(data)) as zf:
-                ct = zf.open("[Content_Types].xml").read(_SNIFF_CAP)
-        except Exception:  # not a readable zip: refuse below
-            ct = b""
-        if _XLSX_MAIN in ct:
-            return "xlsx"
+        # a zip container: ooxml.inspect decides whether it is a real xlsx, with a specific reason
+        # (macro, malformed, not a spreadsheet), so the sniff stays shallow
+        return "xlsx"
     raise IntakeRejected("unsupported_type")
 
 
