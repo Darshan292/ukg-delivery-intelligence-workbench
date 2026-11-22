@@ -208,10 +208,50 @@ CREATE FUNCTION public.wb_is_human_reviewer(actor bigint) RETURNS boolean LANGUA
   SELECT EXISTS (SELECT 1 FROM public.actor a
                  WHERE a.id = actor AND a.kind = 'human' AND 'reviewer' = ANY (a.roles)) $$;
 
+CREATE FUNCTION public.wb_is_scoped(source_id bigint, target_id bigint) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  -- no catalogue row (unknown profile) counts as scoped (decision 0003 Q7)
+  SELECT bool_and(coalesce(t.snapshot_scoped, true))
+  FROM public.entity e
+  LEFT JOIN public.catalogue_entity_type t ON t.product_profile = e.product_profile AND t.name = e.entity_type
+  WHERE e.id IN (source_id, target_id) $$;
+
 CREATE FUNCTION public.wb_review_event_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE rel public.relationship%ROWTYPE; profile text;
 BEGIN
   IF NOT public.wb_is_human_reviewer(NEW.actor_id) THEN
     RAISE EXCEPTION 'review: actor is not a human reviewer' USING ERRCODE = 'WB002';
+  END IF;
+  IF NEW.target_kind = 'claim' THEN RETURN NULL; END IF;
+  SELECT * INTO rel FROM public.relationship WHERE id = NEW.relationship_id;
+  SELECT coalesce(max(NULLIF(e.product_profile, 'unknown')), 'unknown') INTO profile
+    FROM public.entity e WHERE e.id IN (rel.source_entity_id, rel.target_entity_id);
+  IF public.wb_is_scoped(rel.source_entity_id, rel.target_entity_id) THEN
+    IF NOT EXISTS (SELECT 1 FROM public.snapshot s
+                   WHERE s.id = NEW.scope_snapshot_id AND s.product_profile = profile) THEN
+      RAISE EXCEPTION 'review: scope must name a snapshot of the profile' USING ERRCODE = 'WB003';
+    END IF;
+  ELSIF NEW.scope_snapshot_id IS NOT NULL THEN
+    RAISE EXCEPTION 'review: scope must be null for unscoped relationship' USING ERRCODE = 'WB003';
+  END IF;
+  IF NEW.successor_relationship_id IS NOT NULL THEN
+    IF (SELECT source_entity_id FROM public.relationship WHERE id = NEW.successor_relationship_id)
+       <> rel.source_entity_id THEN
+      RAISE EXCEPTION 'review: successor must share the source entity' USING ERRCODE = 'WB003';
+    END IF;
+    -- owner question S5-Q5 (decided): checked per scope, over every superseded event.
+    -- shortcut (S5-Q6, decided): no lock, so two concurrent supersessions could still close a
+    -- cycle; add pg_advisory_xact_lock when M1's single reviewer becomes several.
+    IF EXISTS (WITH RECURSIVE chain(id) AS (
+                 SELECT NEW.successor_relationship_id
+                 UNION
+                 SELECT e.successor_relationship_id FROM public.review_event e
+                 JOIN chain ON e.relationship_id = chain.id
+                 WHERE e.verdict = 'superseded'
+                   AND e.scope_snapshot_id IS NOT DISTINCT FROM NEW.scope_snapshot_id)
+               SELECT 1 FROM chain WHERE chain.id = NEW.relationship_id) THEN
+      RAISE EXCEPTION 'review: supersession cycle' USING ERRCODE = 'WB003';
+    END IF;
   END IF;
   RETURN NULL;
 END $$;
