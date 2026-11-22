@@ -7,7 +7,6 @@ exception: the database assigns `id` and `at`, so they are inserted one per stat
 (at, id) order and without those columns. Insert order is the only ordering that survives.
 """
 
-import hashlib
 from collections.abc import Collection
 from decimal import Decimal
 from typing import Any, Final
@@ -76,10 +75,6 @@ def _rows(r: Records, field: str) -> list[dict[str, Any]]:
                 {
                     **c.model_dump(exclude={"locator_ids"}),
                     "locator_ids": list(c.locator_ids),
-                    # placeholder only: the claim trigger recomputes it (Task 9 deletes this)
-                    "locator_set_hash": hashlib.sha256(
-                        ",".join(map(str, c.locator_ids)).encode()
-                    ).hexdigest(),
                 }
                 for c in r.claims
             ]

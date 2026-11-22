@@ -308,6 +308,53 @@ BEGIN
 END $$;
 CREATE TRIGGER wb_relationship_rules BEFORE INSERT ON public.relationship
   FOR EACH ROW EXECUTE FUNCTION public.wb_relationship_rules();
+
+CREATE FUNCTION public.wb_claim_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE n bigint; scopes bigint; scope bigint;
+BEGIN
+  SELECT count(*), count(DISTINCT coalesce(dv.snapshot_id, 0)), max(dv.snapshot_id)  -- ids start at 1
+    INTO n, scopes, scope
+    FROM public.evidence_locator l JOIN public.document_version dv ON dv.id = l.document_version_id
+   WHERE l.id = ANY (NEW.locator_ids);
+  IF cardinality(NEW.locator_ids) = 0 OR n <> cardinality(NEW.locator_ids) THEN  -- missing, repeated or NULL
+    RAISE EXCEPTION 'claim: locators missing or repeated' USING ERRCODE = 'WB003';
+  END IF;
+  IF scopes > 1 THEN  -- also covers mixing scoped and unscoped (decision 0003, team Q5)
+    RAISE EXCEPTION 'claim: locators span more than one snapshot' USING ERRCODE = 'WB003';
+  END IF;
+  IF scope IS DISTINCT FROM NEW.scope_snapshot_id THEN
+    RAISE EXCEPTION 'claim: scope differs from locator snapshot' USING ERRCODE = 'WB003';
+  END IF;
+  -- the client's hash is ignored: a different hash would defeat dedup
+  NEW.locator_ids := ARRAY(SELECT x FROM unnest(NEW.locator_ids) AS x ORDER BY x);
+  NEW.locator_set_hash := encode(sha256(convert_to(array_to_string(NEW.locator_ids, ','), 'UTF8')), 'hex');
+  RETURN NEW;
+END $$;
+CREATE TRIGGER wb_claim_rules BEFORE INSERT ON public.claim
+  FOR EACH ROW EXECUTE FUNCTION public.wb_claim_rules();
+
+CREATE FUNCTION public.wb_entity_version_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE dv public.document_version%ROWTYPE; n bigint; ent_profile text; doc_profile text;
+BEGIN
+  SELECT * INTO dv FROM public.document_version WHERE id = NEW.document_version_id;
+  IF dv.id IS NULL THEN RETURN NEW; END IF;  -- the foreign key reports it
+  IF NEW.snapshot_id IS DISTINCT FROM dv.snapshot_id THEN
+    RAISE EXCEPTION 'entity_version: snapshot differs from its version' USING ERRCODE = 'WB003';
+  END IF;
+  SELECT count(*) INTO n FROM public.evidence_locator l
+   WHERE l.id = ANY (NEW.locator_ids) AND l.document_version_id = NEW.document_version_id;
+  IF cardinality(NEW.locator_ids) = 0 OR n <> cardinality(NEW.locator_ids) THEN
+    RAISE EXCEPTION 'entity_version: locator missing or in another version' USING ERRCODE = 'WB003';
+  END IF;
+  SELECT product_profile INTO ent_profile FROM public.entity WHERE id = NEW.entity_id;
+  SELECT product_profile INTO doc_profile FROM public.document WHERE id = dv.document_id;
+  IF ent_profile NOT IN (doc_profile, 'unknown') THEN
+    RAISE EXCEPTION 'profiles: entity version' USING ERRCODE = 'WB003';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER wb_entity_version_rules BEFORE INSERT ON public.entity_version
+  FOR EACH ROW EXECUTE FUNCTION public.wb_entity_version_rules();
 """
 
 
