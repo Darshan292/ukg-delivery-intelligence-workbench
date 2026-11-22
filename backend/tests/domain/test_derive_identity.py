@@ -2,6 +2,9 @@
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 """FICTIONAL: not UKG behaviour."""
 
+from decimal import Decimal
+from decimal import Decimal as D
+
 import pytest
 
 from app.domain.derive import Cluster, conflicts, identity_clusters
@@ -84,15 +87,15 @@ def two_exports(fx: Fx, v1: JsonScalar, v2: JsonScalar, name: str = "q") -> tupl
 
 
 def test_attribute_conflict_two_exports_in_same_snapshot(fx: Fx) -> None:
-    v1, v2 = two_exports(fx, 40, 37.5)
+    v1, v2 = two_exports(fx, Decimal(40), Decimal("37.5"))
     [c] = conflicts(fx.w.build(), fx.s1.id)
     assert (c.kind, c.attribute, c.entity_version_ids) == ("attribute", "q", (v1, v2))
 
 
 def test_attribute_no_conflict_for_documentary_values(fx: Fx) -> None:
     x = fx.w.entity("cfg", "X")
-    fx.w.version(x, fx.e1, q=40)
-    fx.w.version(x, fx.d, q=37.5)  # unscoped design document
+    fx.w.version(x, fx.e1, q=Decimal(40))
+    fx.w.version(x, fx.d, q=Decimal("37.5"))  # unscoped design document
     assert fx.kinds() == []
 
 
@@ -103,7 +106,13 @@ def test_attribute_no_conflict_for_display_only_attribute(fx: Fx) -> None:
 
 @pytest.mark.parametrize(
     ("a", "b", "conflict"),
-    [(True, 1, True), (1, True, True), (40, 40.0, False), (None, None, False), ("x", "x", False)],
+    [
+        (True, D(1), True),
+        (D(1), True, True),
+        (D(40), D("40.0"), False),
+        (None, None, False),
+        ("x", "x", False),
+    ],
 )
 def test_attribute_bool_is_not_number(fx: Fx, a: JsonScalar, b: JsonScalar, conflict: bool) -> None:
     two_exports(fx, a, b)
@@ -113,14 +122,14 @@ def test_attribute_bool_is_not_number(fx: Fx, a: JsonScalar, b: JsonScalar, conf
 def test_attribute_missing_in_one_version_is_no_conflict(fx: Fx) -> None:
     e1b = fx.w.export(fx.s1)
     x = fx.w.entity("cfg", "X")
-    fx.w.version(x, fx.e1, q=40)
+    fx.w.version(x, fx.e1, q=Decimal(40))
     fx.w.version(x, e1b, other=1)
     assert fx.kinds() == []
 
 
 def test_attribute_superseded_version_excluded(fx: Fx) -> None:
     x = fx.w.entity("cfg", "X")
-    fx.w.version(x, fx.e1, q=40)
+    fx.w.version(x, fx.e1, q=Decimal(40))
     v2 = fx.w.new_version(fx.e1)
-    fx.w.version(x, v2, q=37.5)
+    fx.w.version(x, v2, q=Decimal("37.5"))
     assert fx.kinds() == []

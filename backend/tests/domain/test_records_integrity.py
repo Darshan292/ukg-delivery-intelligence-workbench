@@ -3,6 +3,7 @@
 """Each test builds a valid world, then breaks one thing. FICTIONAL: not UKG behaviour."""
 
 from collections.abc import Callable
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -96,7 +97,10 @@ DANGLING: list[tuple[str, dict[str, Any], Callable[[Any], bool]]] = [
     ("entity_versions", {"attributes": (), "locator_ids": (999,)}, lambda _: True),
     (
         "entity_versions",
-        {"attributes": (Attribute(name="x", value=1, locator_id=999),), "locator_ids": (999,)},
+        {
+            "attributes": (Attribute(name="x", value=Decimal(1), locator_id=999),),
+            "locator_ids": (999,),
+        },
         lambda _: True,
     ),
     ("relationships", {"source_entity_id": 999}, lambda _: True),

@@ -26,7 +26,7 @@ from tests.domain.builders import T0, World
 CFG_KEYS = ["A", "B", "C", "D"]
 BASES: list[Basis] = ["explicit_source", "deterministic_rule", "llm_suggestion"]
 POLARITIES: list[Polarity] = ["present", "absent"]
-VALUES: list[JsonScalar] = [40, 37.5, "x", True, None]
+VALUES: list[JsonScalar] = [Decimal(40), Decimal("37.5"), "x", True, None]
 Cand = tuple[str, Entity, Entity, str | None]
 
 

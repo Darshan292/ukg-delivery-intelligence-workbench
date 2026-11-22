@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 """Typed records of the canonical relationship model (rev 2.1). Pure, in-memory, no I/O."""
 
+import math
+import re
 from decimal import Decimal
 from typing import Annotated, Final, Literal, Self
 
@@ -11,7 +13,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    FiniteFloat,
     StringConstraints,
     model_validator,
 )
@@ -105,7 +106,25 @@ def _sorted_unique(ids: tuple[int, ...]) -> tuple[int, ...]:
 SortedIds0 = Annotated[tuple[Id, ...], AfterValidator(_sorted_unique)]
 SortedIds = Annotated[SortedIds0, Field(min_length=1)]
 
-JsonScalar = str | int | FiniteFloat | bool | None
+# Numbers are Decimal only (decision 0003 Q10): parsed from source cell text, never float.
+Number = Annotated[Decimal, Field(allow_inf_nan=False)]
+JsonScalar = str | Number | bool | None
+_NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+
+
+def number_from_cell_text(text: str) -> Decimal:
+    """Strict plain decimal: optional sign, digits, optional point and exponent."""
+    t = text.strip()
+    if not _NUMBER.fullmatch(t):
+        raise ValueError("number: not a plain decimal number")
+    return Decimal(t)
+
+
+def number_from_cell_value(v: int | float) -> Decimal:
+    """For cells a reader returns as int or float; `repr` keeps the shortest round-trip text."""
+    if isinstance(v, bool) or (isinstance(v, float) and not math.isfinite(v)):
+        raise ValueError("number: not a finite number")
+    return Decimal(repr(v))
 
 
 class Entity(Record):

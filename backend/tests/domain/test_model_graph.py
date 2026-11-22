@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -74,23 +75,23 @@ def test_entity_version_needs_a_locator() -> None:
 
 def test_entity_version_attribute_locator_must_be_listed() -> None:
     with pytest.raises(ValidationError):
-        ev(attributes=(Attribute(name="a", value=1, locator_id=9),), locator_ids=(1,))
+        ev(attributes=(Attribute(name="a", value=Decimal(1), locator_id=9),), locator_ids=(1,))
 
 
 def test_entity_version_attribute_names_unique_and_sorted() -> None:
-    a = Attribute(name="a", value=1, locator_id=1)
-    b = Attribute(name="b", value=2, locator_id=1)
+    a = Attribute(name="a", value=Decimal(1), locator_id=1)
+    b = Attribute(name="b", value=Decimal(2), locator_id=1)
     assert ev(attributes=(b, a)).attributes == (a, b)
     with pytest.raises(ValidationError):
         ev(attributes=(a, a))
 
 
-@pytest.mark.parametrize("v", [40, 37.5, "x", True, None])
+@pytest.mark.parametrize("v", [Decimal(40), Decimal("37.5"), "x", True, None])
 def test_attribute_value_accepts_scalar(v: object) -> None:
     assert Attribute(name="a", value=v, locator_id=1).value == v  # pyright: ignore[reportArgumentType]
 
 
-@pytest.mark.parametrize("v", [[1], {"a": 1}, float("nan")])
+@pytest.mark.parametrize("v", [[1], {"a": 1}, float("nan"), 37.5, 40])
 def test_attribute_value_rejects_non_scalar(v: object) -> None:
     with pytest.raises(ValidationError):
         Attribute(name="a", value=v, locator_id=1)  # pyright: ignore[reportArgumentType]
