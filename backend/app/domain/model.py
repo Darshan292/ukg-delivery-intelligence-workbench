@@ -243,7 +243,8 @@ class Claim(Record):
     @model_validator(mode="after")
     def _basis_fields(self) -> Self:
         llm = self.basis == "llm_suggestion"
-        # decision 0003 (team, Q3): explicit claims carry no confidence (a number on a parsed reference is invented)
+        # decision 0003 (team, Q3): explicit claims carry no confidence
+        # (a number on a parsed reference would be invented)
         if (self.basis == "explicit_source") == (self.confidence is not None):
             raise ValueError(
                 "claim: confidence required for rule/llm claims, forbidden for explicit"
