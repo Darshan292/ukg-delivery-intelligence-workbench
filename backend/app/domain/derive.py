@@ -133,6 +133,9 @@ class Conflict(Record):
     attribute: str | None = None
 
 
+_Parts = list[tuple[list[int], list[int]]]  # (cluster members, same_as ids inside)
+
+
 def edge_states(r: Records, s: int) -> dict[int, EdgeState]:
     """Every relationship of the snapshot's profile, computed once."""
     profile = r.snapshot_by_id[s].product_profile
@@ -147,10 +150,13 @@ def _sort_key(c: Conflict) -> tuple[int, tuple[int, ...], tuple[int, ...], str]:
     return (_KIND_ORDER.index(c.kind), c.relationship_ids, c.entity_ids, c.attribute or "")
 
 
-def _edge_conflicts(r: Records, s: int, states: dict[int, EdgeState]) -> list[Conflict]:
+def _edge_conflicts(
+    r: Records, s: int, states: dict[int, EdgeState], parts: _Parts
+) -> list[Conflict]:
     out: list[Conflict] = []
+    rep = {m: members[0] for members, _ in parts for m in members}  # accepted clusters only
     counting = {i: st for i, st in states.items() if st.state in _COUNTS}
-    cardinality: dict[tuple[int, str, str], list[int]] = {}
+    cardinality: dict[tuple[int, str, str], list[tuple[int, int]]] = {}
     for rel_id in counting:
         rel = r.relationship_by_id[rel_id]
         live = live_claims(r, rel_id, s)
@@ -171,7 +177,9 @@ def _edge_conflicts(r: Records, s: int, states: dict[int, EdgeState]) -> list[Co
             next((t for t in cat.relationship_types if t.name == rel.type), None) if cat else None
         )
         if spec and (src.entity_type, tgt.entity_type) in spec.single_valued_for:
-            cardinality.setdefault((src.id, rel.type, tgt.entity_type), []).append(rel_id)
+            cardinality.setdefault((src.id, rel.type, tgt.entity_type), []).append(
+                (rel_id, rep.get(tgt.id, tgt.id))
+            )
         present = [c for c in live if c.polarity == "present"]
         # owner question Q11 (pending): includes accepted edges (flag only, tier unchanged)
         if (
@@ -195,9 +203,10 @@ def _edge_conflicts(r: Records, s: int, states: dict[int, EdgeState]) -> list[Co
                     claim_ids=tuple(c.id for c in present),
                 )
             )
-    for ids in cardinality.values():
-        if len(ids) > 1:
-            # owner question Q13 (pending): counted on stored edges, not on same_as clusters
+    for pairs in cardinality.values():
+        ids = [i for i, _ in pairs]
+        # decision 0003 Q13: distinct targets after collapsing accepted same_as clusters
+        if len({t for _, t in pairs}) > 1:
             claim_ids = [c.id for i in ids for c in live_claims(r, i, s) if c.polarity == "present"]
             out.append(
                 Conflict(
@@ -249,9 +258,6 @@ def _cluster_parts(
         ]
         out.append((members, inside))
     return sorted(out, key=lambda t: t[0])
-
-
-_Parts = list[tuple[list[int], list[int]]]
 
 
 def identity_clusters(
@@ -328,7 +334,7 @@ def conflicts(
 ) -> tuple[Conflict, ...]:
     states = edge_states(r, s) if states is None else states
     parts = _cluster_parts(r, s, states) if parts is None else parts
-    found = _edge_conflicts(r, s, states) + _identity_conflicts(s, states, parts)
+    found = _edge_conflicts(r, s, states, parts) + _identity_conflicts(s, states, parts)
     return tuple(sorted(found + _attribute_conflicts(r, s), key=_sort_key))
 
 
