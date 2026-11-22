@@ -84,6 +84,17 @@ def test_human_without_reviewer_role_fails(review_engine: Engine, world_ids: Ids
         c.execute(text(sql), params)
 
 
+@pytest.mark.parametrize("case", CASES)
+def test_service_actor_holding_reviewer_role_fails(
+    review_engine: Engine, world_ids: Ids, case: str
+) -> None:
+    """Only the `kind = 'human'` half of the check can refuse this actor."""
+    sql, params = CASES[case](world_ids, world_ids.service_with_role)
+    with sqlstate_raised("WB002"), review_engine.begin() as c:
+        c.execute(text(sql), params)
+    assert _count(review_engine) == 0
+
+
 def test_constraint_trigger_not_deferrable(review_engine: Engine, world_ids: Ids) -> None:
     sql, params = CASES["accept"](world_ids, world_ids.service)
     with review_engine.connect() as c:

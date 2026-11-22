@@ -75,6 +75,7 @@ class Ids:
     reviewer: int
     service: int
     plain_human: int  # a human without the reviewer role
+    service_with_role: int  # a service actor that holds the reviewer role
     s1: int
     s2: int
     scoped_rel: int  # uses A->B (cfg is snapshot-scoped)

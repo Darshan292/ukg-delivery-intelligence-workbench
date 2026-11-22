@@ -29,11 +29,12 @@ def world_ids(store: Engine) -> Ids:
     w.claim(succ, ex)
     w.claim(back, ex)
     human = Actor(id=99, kind="human", display_name="Plain human", roles=frozenset())
-    r = w.build().extended(actors=(human,))
+    svc_role = Actor(id=98, kind="service", display_name="Svc", roles=frozenset({"reviewer"}))
+    r = w.build().extended(actors=(human, svc_role))
     with store.begin() as conn:
         save(conn, r)
     return Ids(
-        reviewer=rev.id, service=svc.id, plain_human=human.id, s1=s1.id, s2=s2.id,
+        reviewer=rev.id, service=svc.id, plain_human=human.id, service_with_role=svc_role.id, s1=s1.id, s2=s2.id,
         scoped_rel=scoped.id, succ_rel=succ.id, back_rel=back.id, unscoped_rel=unscoped.id,
         scoped_claim=c1.id, unscoped_claim=c2.id, export_dv=ex.id, design_dv=design.id,
         export_locator=c1.locator_ids[0], design_locator=c2.locator_ids[0], s2_export_dv=ex2.id,
