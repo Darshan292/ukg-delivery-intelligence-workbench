@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.db import get_session
 from app.models import Entity, EvidenceLocator, Relationship
-from app.schemas import GraphEdge, GraphNode, ImpactResponse, LocatorOut
+from app.schemas import GraphEdge, GraphNode, LocatorOut, NeighbourhoodResponse
 
 router = APIRouter()
 
@@ -25,11 +25,11 @@ def _byte_order(s: str) -> bytes:
     return s.encode()
 
 
-@router.get("/neighbourhood", response_model=ImpactResponse)
+@router.get("/neighbourhood", response_model=NeighbourhoodResponse)
 def neighbourhood(
     entity: Annotated[str, Query(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._-]+$")],
     session: Session = Depends(get_session),  # noqa: B008
-) -> ImpactResponse:
+) -> NeighbourhoodResponse:
     seed = session.scalar(select(Entity).where(Entity.natural_key == entity).order_by(Entity.id))
     if seed is None:
         raise HTTPException(status_code=404, detail="entity not found")
@@ -74,7 +74,7 @@ def neighbourhood(
                 locator=LocatorOut(kind=loc.kind, locator=loc.locator, snippet=loc.snippet),
             )
         )
-    return ImpactResponse(
+    return NeighbourhoodResponse(
         entity=seed.natural_key,
         fictional=True,
         notice=NOTICE,

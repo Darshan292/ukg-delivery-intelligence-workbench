@@ -28,7 +28,7 @@ class GraphEdge(BaseModel):
     locator: LocatorOut
 
 
-class ImpactResponse(BaseModel):
+class NeighbourhoodResponse(BaseModel):
     entity: str
     fictional: Literal[True]
     notice: str
