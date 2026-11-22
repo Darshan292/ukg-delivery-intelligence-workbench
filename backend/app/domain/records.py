@@ -28,6 +28,7 @@ from app.domain.model import (
     ReviewEvent,
     Snapshot,
     UnresolvedReference,
+    normalise_key_v1,
 )
 
 
@@ -359,3 +360,40 @@ _CHECKS: Final[tuple[Callable[[Records], None], ...]] = (
     _claim_scope,
     _review_events,
 )
+
+
+class EntityNotFound(LookupError):
+    """No entity matches. Carries no input: the queried key is untrusted."""
+
+
+class AmbiguousEntity(LookupError):
+    """More than one entity matches; candidates are store data (sorted key triples)."""
+
+    def __init__(self, candidates: tuple[tuple[str, str, str], ...]) -> None:
+        super().__init__(candidates)
+        self.candidates = candidates
+
+    def __str__(self) -> str:
+        return f"ambiguous entity: {len(self.candidates)} candidates"
+
+
+def resolve_entity(
+    r: Records,
+    natural_key: str,
+    *,
+    product_profile: ProductProfile | None = None,
+    entity_type: str | None = None,
+) -> Entity:
+    key = normalise_key_v1(natural_key)
+    hits = [
+        e
+        for e in r.entities
+        if e.natural_key == key
+        and product_profile in (None, e.product_profile)
+        and entity_type in (None, e.entity_type)
+    ]
+    if not hits:
+        raise EntityNotFound
+    if len(hits) > 1:
+        raise AmbiguousEntity(tuple(sorted(e.key for e in hits)))
+    return hits[0]
