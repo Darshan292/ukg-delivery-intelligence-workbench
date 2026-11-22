@@ -90,6 +90,12 @@ jobs:
         run: |
           npx --yes license-checker-rseidelsohn@5.0.1 --excludePrivatePackages --json > "$RUNNER_TEMP/npm-all.json"
           python3 ../scripts/license_gate.py --npm-json "$RUNNER_TEMP/npm-all.json" --dev
+      - name: Every platform in the lockfile (CI installs only Linux)
+        if: hashFiles('frontend/package.json') != ''
+        working-directory: frontend
+        run: |
+          python3 ../scripts/license_gate.py --npm-lock package-lock.json
+          python3 ../scripts/license_gate.py --npm-lock package-lock.json --dev
 
   osv:
     runs-on: ubuntu-latest
