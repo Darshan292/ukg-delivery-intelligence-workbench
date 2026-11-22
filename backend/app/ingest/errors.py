@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
+"""Fixed reason codes: the only text an intake rejection carries (never content or names)."""
+
+from dataclasses import dataclass
+from typing import Literal
+
+Reason = Literal[
+    "too_large",
+    "profile_not_permitted",
+    "already_ingested",
+    "unsupported_type",
+    "type_mismatch",
+    "archive_malformed",
+    "archive_too_many_entries",
+    "archive_too_large",
+    "archive_ratio",
+    "archive_bad_entry_name",
+    "archive_encrypted",
+    "unsupported_part",
+    "macro",
+    "external_link",
+    "embedded_object",
+    "xml_forbidden",
+    "xml_malformed",
+    "workbook_malformed",
+    "sheet_too_large",
+    "unsupported_cell",
+    "pdf_too_many_pages",
+    "pdf_too_many_objects",
+    "pdf_timeout",
+    "pdf_resource_limit",
+    "pdf_malformed",
+    "pdf_worker_failed",
+    "records_invalid",
+]
+
+
+class IntakeRejected(ValueError):
+    def __init__(self, reason: Reason) -> None:
+        super().__init__(f"intake rejected: {reason}")
+        self.reason: Reason = reason
+
+
+_MIB = 1024 * 1024
+
+
+# owner question S3-Q7 (decided): placeholder limits set by the team, not measured
+@dataclass(frozen=True, slots=True)
+class Limits:
+    max_file_bytes: int = 10 * _MIB
+    zip_max_entries: int = 1000
+    zip_max_total_bytes: int = 50 * _MIB
+    zip_max_ratio: int = 100
+    sheet_max_cells: int = 1_000_000  # max_row x max_column grid
+    max_merged_cells: int = 100_000  # sum of merge areas
+    pdf_max_pages: int = 500
+    pdf_max_objects: int = 100_000
+    pdf_page_seconds: float = 5
+    pdf_total_seconds: float = 30
+    pdf_memory_bytes: int = 1024 * _MIB
+
+
+DEFAULT_LIMITS = Limits()
