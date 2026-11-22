@@ -3,20 +3,38 @@
 """Human review API. The actor always comes from a server-side credential, never from a body."""
 
 import hmac
-from typing import Annotated
+import logging
+import re
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+from sqlalchemy import insert
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
-from app.db import get_session
+from app.db import get_session, sqlstate
 from app.domain.derive import evaluate
-from app.domain.model import Claim, Entity
+from app.domain.model import Claim, ClaimReviewEvent, Entity, RelationshipReviewEvent
 from app.domain.records import Records, is_scoped
-from app.models import Actor
-from app.schemas import KeyTriple, LocatorOut, ReviewClaimOut, ReviewItem, ReviewItemsResponse
+from app.models import Actor, ReviewEvent
+from app.schemas import (
+    ClaimVerdictIn,
+    KeyTriple,
+    LocatorOut,
+    RelationshipVerdictIn,
+    ReviewClaimOut,
+    ReviewItem,
+    ReviewItemsResponse,
+    VerdictOut,
+)
 from app.store import load
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/review")
 _LOC_COLUMNS = {"id", "document_version_id", "kind", "snippet", "extractor", "extracted_at"}
 
@@ -106,3 +124,95 @@ def review_items(
             )
         )
     return ReviewItemsResponse(snapshot_id=snapshot_id, items=items)
+
+
+_TRAILER = re.compile(r": [a-z_]+ id \d+$")
+
+
+def _rule(exc: ValidationError) -> str:
+    """The domain's rule text without the trailing record kind and id. Fixed store logic, never
+    input (domain messages name the rule, the kind and the id only)."""
+    msg = exc.errors()[0]["msg"].removeprefix("Value error, ")
+    return _TRAILER.sub("", msg)
+
+
+def _submit(
+    session: Session,
+    actor_id: int,
+    event: dict[str, Any],
+    check: Callable[[Records], bool],
+) -> JSONResponse:
+    # shortcut: load() per request is O(store); fine at M1 synthetic scale (unmeasured)
+    r = load(session.connection())
+    if not check(r):
+        raise HTTPException(404, "not found")
+    candidate = {
+        **event,
+        "id": max((e.id for e in r.review_events), default=0) + 1,
+        "at": datetime.now(UTC),
+        "actor_id": actor_id,
+    }
+    try:
+        cls = ClaimReviewEvent if candidate["target_kind"] == "claim" else RelationshipReviewEvent
+        r.extended(review_events=(cls.model_validate(candidate),))
+    except ValidationError as exc:
+        return JSONResponse({"detail": "invalid review", "rule": _rule(exc)}, status_code=422)
+    cols = {k: v for k, v in candidate.items() if k not in ("id", "at")}  # granted columns only
+    try:
+        row = session.execute(
+            insert(ReviewEvent).values(**cols).returning(ReviewEvent.id, ReviewEvent.at)
+        ).one()
+        session.commit()
+    except DBAPIError as exc:
+        session.rollback()
+        code = sqlstate(exc)
+        if code is not None and (code.startswith("WB") or code.startswith("23")):
+            log.warning("review rejected by the store: %s", code)  # the code only
+            return JSONResponse({"detail": "rejected by the store"}, status_code=409)
+        raise  # anything else, 42501 (misconfigured role) included, is a generic 500
+    out = VerdictOut(id=row.id, at=row.at, verdict=str(candidate["verdict"]))
+    return JSONResponse(out.model_dump(mode="json"), status_code=201)
+
+
+@router.post("/relationships/{relationship_id}/verdicts", status_code=201)
+def relationship_verdict(
+    relationship_id: Annotated[int, Path(ge=1)],
+    body: RelationshipVerdictIn,
+    actor_id: int = Depends(require_reviewer),
+    session: Session = Depends(get_session),  # noqa: B008
+) -> JSONResponse:
+    def known(r: Records) -> bool:
+        return (
+            relationship_id in r.relationship_by_id
+            and (body.snapshot_id is None or body.snapshot_id in r.snapshot_by_id)
+            and (
+                body.successor_relationship_id is None
+                or body.successor_relationship_id in r.relationship_by_id
+            )
+        )
+
+    event = {
+        "target_kind": "relationship",
+        "relationship_id": relationship_id,
+        "scope_snapshot_id": body.snapshot_id,
+        "verdict": body.verdict,
+        "reason": body.reason,
+        "successor_relationship_id": body.successor_relationship_id,
+    }
+    return _submit(session, actor_id, event, known)
+
+
+@router.post("/claims/{claim_id}/verdicts", status_code=201)
+def claim_verdict(
+    claim_id: Annotated[int, Path(ge=1)],
+    body: ClaimVerdictIn,
+    actor_id: int = Depends(require_reviewer),
+    session: Session = Depends(get_session),  # noqa: B008
+) -> JSONResponse:
+    event = {
+        "target_kind": "claim",
+        "claim_id": claim_id,
+        "verdict": body.verdict,
+        "reason": body.reason,
+    }
+    return _submit(session, actor_id, event, lambda r: claim_id in r.claim_by_id)
