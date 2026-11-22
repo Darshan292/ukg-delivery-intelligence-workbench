@@ -3,11 +3,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import fixture from "./__fixtures__/impact.json";
+import fixture from "./__fixtures__/neighbourhood.json";
 import { toFlow } from "./graph";
-import type { ImpactResponse } from "./types";
+import type { NeighbourhoodResponse } from "./types";
 
-const resp = fixture as ImpactResponse;
+const resp = fixture as NeighbourhoodResponse;
 
 describe("toFlow", () => {
   it("maps nodes and edges and marks the seed", () => {
@@ -32,7 +32,7 @@ describe("toFlow", () => {
   });
 
   it("is deterministic for shuffled input", () => {
-    const shuffled: ImpactResponse = {
+    const shuffled: NeighbourhoodResponse = {
       ...resp,
       nodes: [...resp.nodes].reverse(),
       edges: [...resp.edges].reverse(),
@@ -60,7 +60,7 @@ describe("toFlow", () => {
       const { edges } = toFlow(resp, "vertical");
       // RULE-T1 -> REQ-T1 points up; TEST-T1 -> RULE-T1 points up.
       expect(edges[0]).toMatchObject({ sourceHandle: "out-t", targetHandle: "in-b" });
-      const down: ImpactResponse = {
+      const down: NeighbourhoodResponse = {
         ...resp,
         edges: [{ ...resp.edges[0], id: "a", source: "REQ-T1", target: "RULE-T1" }],
       };
@@ -68,7 +68,7 @@ describe("toFlow", () => {
     });
 
     it("is deterministic for shuffled input", () => {
-      const shuffled: ImpactResponse = { ...resp, nodes: [...resp.nodes].reverse(), edges: [...resp.edges].reverse() };
+      const shuffled: NeighbourhoodResponse = { ...resp, nodes: [...resp.nodes].reverse(), edges: [...resp.edges].reverse() };
       expect(toFlow(shuffled, "vertical")).toEqual(toFlow(resp, "vertical"));
     });
   });

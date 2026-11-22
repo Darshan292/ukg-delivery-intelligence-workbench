@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 
-import type { ImpactResponse } from "./types";
+import type { NeighbourhoodResponse } from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -21,17 +21,17 @@ function messageFor(status: number, entity: string): string {
   return UNREACHABLE;
 }
 
-export async function fetchImpact(entity: string, signal?: AbortSignal): Promise<ImpactResponse> {
+export async function fetchNeighbourhood(entity: string, signal?: AbortSignal): Promise<NeighbourhoodResponse> {
   let res: Response;
   try {
-    res = await fetch(`/api/impact?entity=${encodeURIComponent(entity)}`, { signal });
+    res = await fetch(`/api/neighbourhood?entity=${encodeURIComponent(entity)}`, { signal });
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     throw new ApiError(503, UNREACHABLE);
   }
   if (!res.ok) throw new ApiError(res.status, messageFor(res.status, entity));
   try {
-    return (await res.json()) as ImpactResponse;
+    return (await res.json()) as NeighbourhoodResponse;
   } catch {
     throw new ApiError(503, UNREACHABLE);
   }
