@@ -343,7 +343,7 @@ def _claim_scope(r: Records) -> None:
             for i in c.locator_ids
         }
         if len(scopes) > 1 and None in scopes:
-            # owner Q5: reject mixing scoped and unscoped locators
+            # decision 0003 (team, Q5): reject mixing scoped and unscoped locators
             raise _fail("claim: mixed scoped and unscoped locators", "claim", c.id)
         if len(scopes) > 1:
             raise _fail("claim: locators span more than one snapshot", "claim", c.id)
