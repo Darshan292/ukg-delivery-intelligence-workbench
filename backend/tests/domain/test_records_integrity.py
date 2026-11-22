@@ -270,3 +270,26 @@ def test_relationship_endpoints_share_a_profile_unless_unknown() -> None:
     assert grow(
         grow(r, "entities", unk), "relationships", base.model_copy(update={"target_entity_id": 51})
     )
+
+
+def test_relationship_between_two_unknown_entities_is_rejected() -> None:
+    r = rich()
+    u1 = Entity(id=50, product_profile="unknown", entity_type="zzz", natural_key="U1")
+    u2 = Entity(id=51, product_profile="unknown", entity_type="zzz", natural_key="U2")
+    rel = r.relationships[0].model_copy(
+        update={"id": 99, "type": "anything", "source_entity_id": 50, "target_entity_id": 51}
+    )
+    with pytest.raises(ValidationError, match="catalogue: relationship between unknown"):
+        grow(grow(r, "entities", u1, u2), "relationships", rel)
+
+
+def test_known_to_unknown_relationship_is_typed_against_the_known_catalogue() -> None:
+    r = rich()
+    unk = Entity(id=50, product_profile="unknown", entity_type="zzz", natural_key="U")
+    base = r.relationships[0].model_copy(
+        update={"id": 99, "source_entity_id": r.entities[0].id, "target_entity_id": 50}
+    )
+    r2 = grow(r, "entities", unk)
+    assert grow(r2, "relationships", base.model_copy(update={"qualifier": None}))
+    with pytest.raises(ValidationError, match="catalogue: relationship type"):
+        grow(r2, "relationships", base.model_copy(update={"type": "zzz"}))
