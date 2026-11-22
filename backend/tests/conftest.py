@@ -9,9 +9,11 @@ Set REQUIRE_DB_TESTS=1 (CI) so that a missing Postgres fails instead of skipping
 """
 
 import os
+import secrets
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Final
 
 import pytest
 from alembic import command
@@ -97,6 +99,42 @@ def migrated_url(db_url: URL) -> URL:
     return db_url
 
 
+APP_ROLES: Final = ("wb_ingest", "wb_review")
+
+
+@pytest.fixture(scope="session")
+def role_urls(migrated_url: URL) -> Iterator[dict[str, URL]]:
+    """Throwaway LOGIN members of the group roles; tests connect AS the app role, not the owner."""
+    pw, tag = secrets.token_hex(16), uuid.uuid4().hex[:8]
+    logins = {g: f"{g}_t{tag}" for g in APP_ROLES}  # unique per session
+    eng = create_engine(migrated_url, isolation_level="AUTOCOMMIT")
+    with eng.connect() as c:
+        for (
+            g,
+            login,
+        ) in logins.items():  # constants plus hex: no injection
+            c.execute(text(f"CREATE ROLE {login} LOGIN PASSWORD '{pw}' IN ROLE {g}"))  # noqa: S608
+    yield {g: migrated_url.set(username=login, password=pw) for g, login in logins.items()}
+    with eng.connect() as c:
+        for login in logins.values():
+            c.execute(text(f"DROP ROLE IF EXISTS {login}"))
+    eng.dispose()
+
+
+@pytest.fixture
+def ingest_engine(role_urls: dict[str, URL]) -> Iterator[Engine]:
+    eng = create_engine(role_urls["wb_ingest"])
+    yield eng
+    eng.dispose()
+
+
+@pytest.fixture
+def review_engine(role_urls: dict[str, URL]) -> Iterator[Engine]:
+    eng = create_engine(role_urls["wb_review"])
+    yield eng
+    eng.dispose()
+
+
 @pytest.fixture
 def store(migrated_url: URL) -> Iterator[Engine]:
     """Owner engine over empty tables."""
@@ -107,10 +145,10 @@ def store(migrated_url: URL) -> Iterator[Engine]:
 
 
 @pytest.fixture
-def graph_client(store: Engine) -> TestClient:
-    """Tracer seed saved, app served on the same engine."""
+def graph_client(store: Engine, review_engine: Engine) -> TestClient:
+    """Tracer seed saved as the owner; the app is served as a wb_review member (least privilege)."""
     from app.seed import seed_tracer_graph
 
     with store.begin() as c:
         seed_tracer_graph(c)
-    return client_for(store)
+    return client_for(review_engine)

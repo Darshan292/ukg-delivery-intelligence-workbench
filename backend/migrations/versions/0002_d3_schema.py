@@ -166,11 +166,28 @@ CREATE TABLE unresolved_reference (
 );
 """
 
+# Owner question S5-Q8 (decided): the migration creates the NOLOGIN group roles; login members
+# are created by scripts/dev.sh (dev) and by the test fixtures. No INSERT on `actor` or the
+# catalogue for any app role, so an app role cannot mint a human reviewer.
+ROLES_DDL = """
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'wb_ingest') THEN CREATE ROLE wb_ingest NOLOGIN; END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'wb_review') THEN CREATE ROLE wb_review NOLOGIN; END IF;
+END $$;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO wb_ingest, wb_review;
+GRANT INSERT ON snapshot, document, document_version, evidence_locator, entity, entity_version,
+  relationship, claim, unresolved_reference TO wb_ingest;
+-- no id, no at: the database alone assigns identity and time (ordering cannot be forged)
+GRANT INSERT (target_kind, claim_id, relationship_id, scope_snapshot_id, verdict, reason,
+  successor_relationship_id, actor_id) ON review_event TO wb_review;
+"""
+
 
 def upgrade() -> None:
     for t in ("evidence_locator", "relationship", "entity"):
         op.drop_table(t)
     op.execute(TABLES_DDL)
+    op.execute(ROLES_DDL)
 
 
 def downgrade() -> None:

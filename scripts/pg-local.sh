@@ -50,8 +50,11 @@ start() {
   fi
   psql_() { as "$BIN/psql" -h "$DIR" -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -qtA "$@"; }
   if [ "$(psql_ -d postgres -c "SELECT 1 FROM pg_roles WHERE rolname='tracer'")" != 1 ]; then
-    psql_ -d postgres -c "CREATE ROLE tracer LOGIN CREATEDB PASSWORD 'tracer'"
+    psql_ -d postgres -c "CREATE ROLE tracer LOGIN CREATEDB CREATEROLE PASSWORD 'tracer'"
   fi
+  # CREATEROLE lets the migration create the wb_* group roles (in PostgreSQL 16 the creator gets
+  # ADMIN on them, which IN ROLE needs); the ALTER also upgrades clusters made by older versions.
+  psql_ -d postgres -c "ALTER ROLE tracer CREATEROLE"
   if [ "$(psql_ -d postgres -c "SELECT 1 FROM pg_database WHERE datname='tracer'")" != 1 ]; then
     psql_ -d postgres -c "CREATE DATABASE tracer OWNER tracer"
   fi

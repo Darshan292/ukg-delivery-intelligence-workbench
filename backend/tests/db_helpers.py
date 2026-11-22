@@ -5,6 +5,7 @@
 import importlib.util
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -66,3 +67,23 @@ def client_for(engine: Engine) -> TestClient:
 
     app.dependency_overrides[get_session] = _session
     return TestClient(app, raise_server_exceptions=False)
+
+
+@dataclass(frozen=True)
+class Ids:
+    reviewer: int
+    service: int
+    plain_human: int  # a human without the reviewer role
+    s1: int
+    s2: int
+    scoped_rel: int  # uses A->B (cfg is snapshot-scoped)
+    succ_rel: int  # uses A->C
+    back_rel: int  # uses B->A
+    unscoped_rel: int  # implements A->Q (req is not scoped)
+    scoped_claim: int
+    unscoped_claim: int
+    export_dv: int  # export of s1
+    design_dv: int
+    export_locator: int
+    design_locator: int
+    s2_export_dv: int
