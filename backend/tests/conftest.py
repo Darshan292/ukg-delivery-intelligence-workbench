@@ -79,3 +79,37 @@ def client(db_engine: Engine) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_session] = _session
     yield TestClient(app)
+
+
+@pytest.fixture
+def graph_engine(db_engine: Engine, db_url: URL) -> Engine:
+    """Migrated database with empty tracer tables."""
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    root = Path(__file__).resolve().parent.parent
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "migrations"))
+    cfg.attributes["url"] = db_url.render_as_string(hide_password=False)
+    command.upgrade(cfg, "head")
+    with db_engine.begin() as c:
+        c.execute(text("TRUNCATE evidence_locator, relationship, entity RESTART IDENTITY CASCADE"))
+    return db_engine
+
+
+@pytest.fixture
+def graph_client(graph_engine: Engine) -> Iterator[TestClient]:
+    from app.seed import seed_tracer_graph
+
+    with Session(graph_engine) as s:
+        seed_tracer_graph(s)
+    app = create_app()
+
+    def _session() -> Iterator[Session]:
+        with Session(graph_engine) as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _session
+    yield TestClient(app, raise_server_exceptions=False)

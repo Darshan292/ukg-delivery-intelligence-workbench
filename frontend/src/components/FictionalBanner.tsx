@@ -8,7 +8,7 @@ export function FictionalBanner({ text = DEFAULT_TEXT }: { text?: string }) {
   return (
     <div
       role="note"
-      className="border-b border-amber-700 bg-amber-100 px-4 py-2 text-sm font-medium text-amber-950"
+      className="border-b border-banner-line bg-banner-bg px-4 py-2 text-[13px] font-medium text-banner-ink"
     >
       {text}
     </div>

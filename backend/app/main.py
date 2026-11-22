@@ -6,15 +6,17 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import InterfaceError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_session
 from app.logging_config import configure_logging
+from app.routes.impact import router as impact_router
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +44,20 @@ def create_app() -> FastAPI:
             log.warning("readiness check failed")
             return JSONResponse({"status": "unavailable"}, status_code=503)
         return JSONResponse({"status": "ready"})
+
+    app.include_router(impact_router)
+
+    @app.exception_handler(RequestValidationError)
+    async def _invalid(_: Request, exc: RequestValidationError) -> JSONResponse:
+        # Never echo exc.errors()[i]["input"]: it is the submitted value.
+        errors = [{"loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]
+        return JSONResponse({"detail": "invalid request", "errors": errors}, status_code=422)
+
+    @app.exception_handler(OperationalError)
+    @app.exception_handler(InterfaceError)
+    async def _db_down(_: Request, exc: Exception) -> JSONResponse:
+        log.warning("database unavailable: %s", type(exc).__name__)  # class only, no details
+        return JSONResponse({"detail": "database unavailable"}, status_code=503)
 
     return app
 
