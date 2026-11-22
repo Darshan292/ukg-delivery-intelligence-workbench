@@ -84,7 +84,7 @@ def edge_state(r: Records, rel_id: int, s: int) -> EdgeState:
     flags: list[Flag] = []
     if v is not None and v.verdict == "superseded":
         state: EffectiveState = "superseded"
-        # owner question Q14 (pending): only a rejected or superseded successor, same snapshot
+        # decision 0003 Q14: only a rejected or superseded successor, same snapshot
         succ = v.successor_relationship_id
         sv = verdict(r, succ, s) if succ is not None else None
         if sv is not None and sv.verdict in ("rejected", "superseded"):
@@ -160,7 +160,7 @@ def _edge_conflicts(
     for rel_id in counting:
         rel = r.relationship_by_id[rel_id]
         live = live_claims(r, rel_id, s)
-        # owner question Q12 (pending): accepted edge with only absent claims = polarity
+        # decision 0003 Q12: accepted edge with only absent claims = polarity
         if any(c.polarity == "absent" for c in live):
             out.append(
                 Conflict(
@@ -181,7 +181,7 @@ def _edge_conflicts(
                 (rel_id, rep.get(tgt.id, tgt.id))
             )
         present = [c for c in live if c.polarity == "present"]
-        # owner question Q11 (pending): includes accepted edges (flag only, tier unchanged)
+        # decision 0003 Q11: includes accepted edges (flag only, tier unchanged)
         if (
             is_scoped(r, rel)
             and present
@@ -269,7 +269,7 @@ def identity_clusters(
         Cluster(
             member_ids=tuple(members),
             representative_id=members[0],
-            # owner question Q13 (pending): only a rejected same_as inside a cluster conflicts
+            # decision 0003 Q13: only a rejected same_as inside a cluster conflicts
             conflicted=any(states[i].state == "rejected" for i in inside),
         )
         for members, inside in parts
@@ -277,7 +277,7 @@ def identity_clusters(
 
 
 def _same_value(a: JsonScalar, b: JsonScalar) -> bool:
-    # owner question Q10 (pending): bool never equals a number; 40 == 40.0
+    # decision 0003 Q10: bool never equals a number; 40 == 40.0
     return (type(a) is bool) == (type(b) is bool) and a == b
 
 
@@ -297,7 +297,7 @@ def _identity_conflicts(s: int, states: dict[int, EdgeState], parts: _Parts) -> 
 
 
 def _attribute_conflicts(r: Records, s: int) -> list[Conflict]:
-    # owner question Q10 (pending): superseded versions excluded; an attribute in one version
+    # decision 0003 Q10: superseded versions excluded; an attribute in one version
     # only is no conflict; display-only attributes are never conflicts (uncatalogued = semantic)
     profile = r.snapshot_by_id[s].product_profile
     by_entity: dict[int, list[EntityVersion]] = {}

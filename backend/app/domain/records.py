@@ -152,7 +152,7 @@ class Records(Record):
 
 def is_scoped(r: Records, rel: Relationship) -> bool:
     """Both endpoint types are snapshot-scoped. An `unknown`-profile endpoint counts as scoped."""
-    # owner question Q7 (pending): unknown endpoints count as snapshot-scoped (conservative)
+    # decision 0003 Q7: unknown endpoints count as snapshot-scoped (conservative)
     for e in (r.entity_by_id[rel.source_entity_id], r.entity_by_id[rel.target_entity_id]):
         spec = r.entity_spec(e)
         if spec is not None and not spec.snapshot_scoped:
@@ -269,7 +269,7 @@ def _catalogue(r: Records) -> None:
     for rel in r.relationships:
         profile = r.relationship_profile(rel)
         if profile == "unknown":
-            # owner question Q7 (pending): unknown-to-unknown edges rejected
+            # decision 0003 Q7: unknown-to-unknown edges rejected
             # (no catalogue to type them)
             raise _fail("catalogue: relationship between unknown entities", "relationship", rel.id)
         cat = r.catalogue_by_profile.get(profile)
@@ -296,7 +296,7 @@ def _profiles(r: Records) -> None:
     for rel in r.relationships:
         a = r.entity_by_id[rel.source_entity_id].product_profile
         b = r.entity_by_id[rel.target_entity_id].product_profile
-        # owner question Q7 (pending): endpoints share a profile unless one is `unknown`
+        # decision 0003 Q7: endpoints share a profile unless one is `unknown`
         if a != b and "unknown" not in (a, b):
             raise _fail("profiles: relationship endpoints", "relationship", rel.id)
 
