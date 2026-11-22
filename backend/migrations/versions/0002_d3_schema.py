@@ -125,7 +125,7 @@ CREATE TABLE claim (
   confidence numeric CONSTRAINT ck_claim_confidence_range CHECK (confidence BETWEEN 0 AND 1),
   model_id text, prompt_version text,
   scope_snapshot_id bigint REFERENCES snapshot,
-  locator_ids bigint[] NOT NULL,                -- sorted by trigger (Task 9); replaces ClaimEvidence (Q3)
+  locator_ids bigint[] NOT NULL,                -- owner question S5-Q3 (pending): array instead of a ClaimEvidence table; sorted by trigger
   locator_set_hash text NOT NULL,               -- set by trigger (Task 9); client values ignored
   created_at timestamptz NOT NULL,
   CONSTRAINT ck_claim_confidence CHECK ((basis = 'explicit_source') = (confidence IS NULL)),
@@ -182,12 +182,30 @@ GRANT INSERT (target_kind, claim_id, relationship_id, scope_snapshot_id, verdict
   successor_relationship_id, actor_id) ON review_event TO wb_review;
 """
 
+# owner question S5-Q4 (pending): every table is append-only, including the whole actor row and
+# the catalogue. Stricter than RM BC 30a (which freezes only actor kind and roles).
+APPEND_ONLY_FN = """
+CREATE FUNCTION public.wb_forbid_change() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'append-only: % cannot be updated or deleted', TG_TABLE_NAME USING ERRCODE = 'WB001';
+END $$;
+"""
+# Statement-level: it fires even when no row matches. TRUNCATE is deliberately not covered:
+# only the owner holds it, and the app roles never do.
+APPEND_ONLY_TRIGGER = """
+CREATE TRIGGER wb_append_only BEFORE UPDATE OR DELETE ON public.{t}
+  FOR EACH STATEMENT EXECUTE FUNCTION public.wb_forbid_change();
+"""
+
 
 def upgrade() -> None:
     for t in ("evidence_locator", "relationship", "entity"):
         op.drop_table(t)
     op.execute(TABLES_DDL)
     op.execute(ROLES_DDL)
+    op.execute(APPEND_ONLY_FN)
+    for t in TABLES:
+        op.execute(APPEND_ONLY_TRIGGER.format(t=t))
 
 
 def downgrade() -> None:

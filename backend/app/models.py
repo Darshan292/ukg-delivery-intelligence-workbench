@@ -180,7 +180,8 @@ class Claim(Base):
     model_id: Mapped[str | None] = mapped_column(Text)
     prompt_version: Mapped[str | None] = mapped_column(Text)
     scope_snapshot_id: Mapped[int | None] = mapped_column(_PK, ForeignKey("snapshot.id"))
-    # sorted and hashed by a trigger (owner question S5-Q3, pending): replaces ClaimEvidence
+    # owner question S5-Q3 (pending): an array column instead of a ClaimEvidence table;
+    # a trigger sorts it and sets the hash
     locator_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger))
     locator_set_hash: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(_TZ)
