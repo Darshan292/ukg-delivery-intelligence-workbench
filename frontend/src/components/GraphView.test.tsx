@@ -4,7 +4,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import fixture from "@/lib/__fixtures__/impact.json";
+import fixture from "@/lib/__fixtures__/neighbourhood.json";
 import type { ImpactResponse } from "@/lib/types";
 import { GraphView } from "./GraphView";
 

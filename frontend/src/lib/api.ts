@@ -24,7 +24,7 @@ function messageFor(status: number, entity: string): string {
 export async function fetchImpact(entity: string, signal?: AbortSignal): Promise<ImpactResponse> {
   let res: Response;
   try {
-    res = await fetch(`/api/impact?entity=${encodeURIComponent(entity)}`, { signal });
+    res = await fetch(`/api/neighbourhood?entity=${encodeURIComponent(entity)}`, { signal });
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     throw new ApiError(503, UNREACHABLE);

@@ -32,7 +32,7 @@ describe("Home page", () => {
   it("reads ?entity=", async () => {
     await renderHome("REQ-T1");
     expect(screen.getByRole("status")).toHaveTextContent("Loading links for REQ-T1");
-    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("/api/impact?entity=REQ-T1");
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("/api/neighbourhood?entity=REQ-T1");
   });
 
   it("uses the first value when entity is repeated", async () => {

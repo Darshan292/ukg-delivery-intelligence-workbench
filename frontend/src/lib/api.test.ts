@@ -3,7 +3,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import fixture from "./__fixtures__/impact.json";
+import fixture from "./__fixtures__/neighbourhood.json";
 import { ApiError, fetchImpact } from "./api";
 
 function mockFetch(status: number, body: unknown = {}) {
@@ -20,7 +20,7 @@ describe("fetchImpact", () => {
   it("requests the encoded entity and returns the body", async () => {
     const f = mockFetch(200, fixture);
     await expect(fetchImpact("A B/1")).resolves.toEqual(fixture);
-    expect(f.mock.calls[0][0]).toBe("/api/impact?entity=A%20B%2F1");
+    expect(f.mock.calls[0][0]).toBe("/api/neighbourhood?entity=A%20B%2F1");
   });
 
   it.each([

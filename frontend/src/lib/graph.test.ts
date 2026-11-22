@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import fixture from "./__fixtures__/impact.json";
+import fixture from "./__fixtures__/neighbourhood.json";
 import { toFlow } from "./graph";
 import type { ImpactResponse } from "./types";
 
