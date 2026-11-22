@@ -76,3 +76,13 @@ def test_trailing_zero_decimals_are_equal(world: World) -> None:
 
 def test_different_numbers_conflict(world: World) -> None:
     assert kinds(world, Decimal("40"), Decimal("37.5")) == ["attribute"]
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [(0.1, "0.1"), (37.3, "37.3"), (1.1, "1.1")],  # none is exact in binary floating point
+)
+def test_number_from_cell_value_keeps_shortest_text(value: float, text: str) -> None:
+    # Decimal(0.1) would be 0.1000000000000000055511151231257827...; the cell shows 0.1.
+    assert number_from_cell_value(value) == Decimal(text)
+    assert str(number_from_cell_value(value)) == text
