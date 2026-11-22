@@ -13,7 +13,7 @@ from sqlalchemy import Engine, text
 from app.domain.locators import PdfWordBbox
 from app.domain.records import Records
 from app.store import load, save
-from tests.db_helpers import has_supersession_cycle, norm, truncate
+from tests.db_helpers import has_supersession_cycle, norm, sqlstate_raised, truncate
 from tests.domain.builders import World
 from tests.domain.strategies import worlds
 
@@ -90,7 +90,8 @@ def test_pdf_locator_roundtrip(store: Engine) -> None:
     assert got.locators[0] == r.locators[0]
 
 
-def test_load_revalidates(store: Engine) -> None:
+def test_unlisted_attribute_locator_is_refused_by_the_db(store: Engine) -> None:
+    """Once a domain-only rule, now also a CHECK: the store can never hold such a row."""
     w = World()
     w.reviewer()
     dv = w.design()
@@ -99,15 +100,13 @@ def test_load_revalidates(store: Engine) -> None:
     w.locator(dv)
     with store.begin() as c:
         save(c, w.build())
-        # an attribute whose locator is not listed: jsonb, so only the domain can refuse it
+    with sqlstate_raised("23514"), store.begin() as c:
         c.execute(
             text(
                 "INSERT INTO entity_version VALUES (1, 1, 1, NULL,"
                 ' \'[{"name": "q", "value": "x", "locator_id": 2}]\', \'{1}\')'
             )
         )
-    with store.connect() as c, pytest.raises(ValidationError):
-        load(c)
 
 
 def test_load_revalidates_cross_record_rules(store: Engine) -> None:

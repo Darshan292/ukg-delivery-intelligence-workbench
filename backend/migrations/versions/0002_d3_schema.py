@@ -42,6 +42,85 @@ WS = r"\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u180e\u2000-\u200a\u2028\u20
 PRE_DDL = r"""
 CREATE FUNCTION public.wb_all_nonblank(vals text[]) RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
   SELECT NOT EXISTS (SELECT 1 FROM unnest(vals) v WHERE v IS NULL OR v !~ '[^__WS__]') $$;
+
+-- jsonb payload shapes mirror app.domain.locators and app.domain.model exactly, or stricter
+-- (never looser): one stored row the domain rejects would make load() fail for good.
+CREATE FUNCTION public.wb_a1_ok(cell text) RETURNS boolean LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog, public AS $$
+DECLARE m text[]; col bigint := 0;
+BEGIN
+  -- stricter than the domain: Python's `$` also accepts a trailing newline, this does not
+  m := regexp_match(cell, '^([A-Z]{1,3})([1-9][0-9]{0,6})$');
+  IF m IS NULL THEN RETURN false; END IF;
+  FOR i IN 1..length(m[1]) LOOP col := col * 26 + ascii(substr(m[1], i, 1)) - 64; END LOOP;
+  RETURN col <= 16384 AND CAST(m[2] AS bigint) <= 1048576;  -- Excel sheet limits
+END $$;
+
+CREATE FUNCTION public.wb_json_keys(j jsonb) RETURNS text[] LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
+  SELECT CASE WHEN jsonb_typeof(j) = 'object'
+    THEN (SELECT coalesce(array_agg(k ORDER BY k COLLATE "C"), '{}') FROM jsonb_object_keys(j) k)
+    ELSE '{}' END $$;
+
+CREATE FUNCTION public.wb_finite_float(j jsonb) RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
+  -- a JSON number whose Python float is finite (1e999 would load as inf)
+  SELECT jsonb_typeof(j) = 'number' AND abs(CAST(j #>> '{}' AS numeric)) <= 1.7976931348623157E+308 $$;
+
+CREATE FUNCTION public.wb_locator_ok(kind text, loc jsonb) RETURNS boolean LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF jsonb_typeof(loc) <> 'object' THEN RETURN false; END IF;
+  IF kind = 'xlsx_cell' THEN
+    RETURN public.wb_json_keys(loc) = ARRAY['cell', 'sheet']
+      AND jsonb_typeof(loc -> 'sheet') = 'string' AND length(loc ->> 'sheet') >= 1
+      AND jsonb_typeof(loc -> 'cell') = 'string' AND public.wb_a1_ok(loc ->> 'cell');
+  ELSIF kind = 'pdf_word_bbox' THEN
+    IF public.wb_json_keys(loc) <> ARRAY['bottom', 'page', 'top', 'x0', 'x1'] THEN RETURN false; END IF;
+    IF NOT (public.wb_finite_float(loc -> 'x0') AND public.wb_finite_float(loc -> 'top')
+            AND public.wb_finite_float(loc -> 'x1') AND public.wb_finite_float(loc -> 'bottom')) THEN
+      RETURN false;
+    END IF;
+    -- page is a strict integer >= 1: "1.0" is a float to Python and is refused
+    RETURN jsonb_typeof(loc -> 'page') = 'number' AND (loc ->> 'page') ~ '^[1-9][0-9]*$'
+      AND CAST(loc ->> 'x0' AS numeric) <= CAST(loc ->> 'x1' AS numeric)
+      AND CAST(loc ->> 'top' AS numeric) <= CAST(loc ->> 'bottom' AS numeric);
+  END IF;
+  RETURN false;
+END $$;
+
+CREATE FUNCTION public.wb_attributes_ok(attrs jsonb, loc_ids bigint[]) RETURNS boolean LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog, public AS $$
+DECLARE a jsonb; v jsonb; n int := 0; names text[] := '{}';
+BEGIN
+  IF jsonb_typeof(attrs) <> 'array' THEN RETURN false; END IF;
+  FOR a IN SELECT x FROM jsonb_array_elements(attrs) x LOOP
+    IF jsonb_typeof(a) <> 'object' OR public.wb_json_keys(a) <> ARRAY['locator_id', 'name', 'value'] THEN
+      RETURN false;
+    END IF;
+    IF jsonb_typeof(a -> 'name') <> 'string' OR (a ->> 'name') !~ '[^__WS__]' THEN RETURN false; END IF;
+    -- a positive integer that the version lists among its own locators (domain: "attribute locator not listed")
+    IF jsonb_typeof(a -> 'locator_id') <> 'number' OR (a ->> 'locator_id') !~ '^[1-9][0-9]{0,17}$' THEN
+      RETURN false;
+    END IF;
+    IF NOT (CAST(a ->> 'locator_id' AS bigint) = ANY (loc_ids)) THEN RETURN false; END IF;
+    v := a -> 'value';
+    IF jsonb_typeof(v) = 'object' THEN
+      -- a Decimal as store.save writes it: {"n": "<decimal text>"}, finite, parseable by Decimal()
+      IF public.wb_json_keys(v) <> ARRAY['n'] OR jsonb_typeof(v -> 'n') <> 'string'
+         OR (v ->> 'n') !~ '^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]{1,9})?$' THEN
+        RETURN false;
+      END IF;
+    ELSIF jsonb_typeof(v) NOT IN ('string', 'boolean', 'null') THEN
+      RETURN false;  -- a bare JSON number would load as float: numbers are tagged
+    END IF;
+    n := n + 1;
+    names := names || (a ->> 'name');
+  END LOOP;
+  RETURN (SELECT count(DISTINCT x) FROM unnest(names) x) = n;  -- names are unique
+END $$;
+
+CREATE FUNCTION public.wb_pairs_ok(j jsonb) RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
+  SELECT jsonb_typeof(j) = 'array' AND NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(j) p
+    WHERE jsonb_typeof(p) <> 'array' OR jsonb_array_length(p) <> 2
+       OR jsonb_typeof(p -> 0) <> 'string' OR jsonb_typeof(p -> 1) <> 'string'
+       OR (p ->> 0) !~ '[^__WS__]' OR (p ->> 1) !~ '[^__WS__]') $$;
 """
 
 TABLES_DDL = r"""
@@ -62,7 +141,7 @@ CREATE TABLE catalogue_relationship_type (
   product_profile text NOT NULL CONSTRAINT ck_crt_profile CHECK (product_profile IN ('synthetic','ukg_pro_wfm','workforce_central')),
   name text COLLATE "C" NOT NULL CONSTRAINT ck_crt_name CHECK (name ~ '[^__WS__]'),
   qualifier_required boolean NOT NULL,
-  single_valued_for jsonb NOT NULL,            -- [[source type, target type], ...] in catalogue order
+  single_valued_for jsonb NOT NULL CONSTRAINT ck_crt_pairs CHECK (public.wb_pairs_ok(single_valued_for)),            -- [[source type, target type], ...] in catalogue order
   PRIMARY KEY (product_profile, name)
 );
 CREATE TABLE snapshot (
@@ -95,6 +174,7 @@ CREATE TABLE evidence_locator (
   snippet text NOT NULL,
   extractor text NOT NULL CONSTRAINT ck_locator_extractor CHECK (extractor ~ '^[^@__WS__]+@[^@__WS__]+$'),
   extracted_at timestamptz NOT NULL,
+  CONSTRAINT ck_locator_shape CHECK (public.wb_locator_ok(kind, locator)),
   CONSTRAINT uq_locator_content UNIQUE (document_version_id, kind, extractor, locator)  -- = domain content_key
 );
 CREATE TABLE entity (
@@ -115,6 +195,7 @@ CREATE TABLE entity_version (
   snapshot_id bigint REFERENCES snapshot,
   attributes jsonb NOT NULL,                    -- [{"name","value","locator_id"}]; numbers as {"n": "<decimal text>"}
   locator_ids bigint[] NOT NULL,
+  CONSTRAINT ck_ev_attributes CHECK (public.wb_attributes_ok(attributes, locator_ids)),
   CONSTRAINT uq_entity_version UNIQUE (entity_id, document_version_id)
 );
 CREATE TABLE relationship (
