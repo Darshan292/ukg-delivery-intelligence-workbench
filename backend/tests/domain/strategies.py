@@ -60,7 +60,17 @@ def worlds(draw: st.DrawFn) -> Records:
             cands.append(("same_as", a, b, None))
     cands += [("implements", a, q, None) for a in cfgs for q in reqs]
     picked = draw(st.lists(st.sampled_from(cands), max_size=5, unique=True))
+    # scenarios that make cardinality and identity conflicts reachable
+    card: list[Cand] = []
+    if len(cfgs) >= 3 and draw(_booleans()):
+        card = [("uses", cfgs[0], cfgs[1], None), ("uses", cfgs[0], cfgs[2], None)]
+    tri: list[Cand] = []
+    if len(cfgs) >= 3 and draw(_booleans()):
+        x, y, z = sorted(cfgs[:3], key=lambda e: e.natural_key)
+        tri = [("same_as", x, y, None), ("same_as", y, z, None), ("same_as", x, z, None)]
+    picked += [c for c in card + tri if c not in picked]
     rels = [w.rel(t, a, b, q) for t, a, b, q in picked]
+    by_key = {(t, a.id, b.id): rel for (t, a, b, _q), rel in zip(picked, rels, strict=True)}
 
     claims: list[Claim] = []
     for rel in rels:
@@ -72,6 +82,9 @@ def worlds(draw: st.DrawFn) -> Records:
                     rel, draw(st.sampled_from(dvs)), basis, draw(st.sampled_from(POLARITIES)), conf
                 )
             )
+
+    for t, a, b, _q in card:
+        claims.append(w.claim(by_key[(t, a.id, b.id)], draw(st.sampled_from(dvs))))
 
     for e in cfgs:
         for dv in exports:
@@ -100,6 +113,12 @@ def worlds(draw: st.DrawFn) -> Records:
                 w.supersede(rel, scope, draw(st.sampled_from(sibs)))
             else:
                 w.reject(rel, scope)
+    if tri:
+        scope = draw(st.sampled_from([s1, s2]))
+        xy, yz, xz = (by_key[(t, a.id, b.id)] for t, a, b, _q in tri)
+        w.accept(xy, scope)
+        w.accept(yz, scope)
+        w.reject(xz, scope)
     return w.build()
 
 

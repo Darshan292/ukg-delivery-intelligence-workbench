@@ -7,6 +7,7 @@ import pytest
 from hypothesis import find, given, settings
 from hypothesis import strategies as st
 
+from app.domain.derive import evaluate
 from app.domain.records import Records
 from tests.domain.strategies import neutral_extension, worlds
 
@@ -57,3 +58,15 @@ def _two_versions_in_s1(r: Records) -> bool:
 )
 def test_worlds_cover_the_interesting_cases(pred: Callable[[Records], bool]) -> None:
     find(worlds(), pred, settings=settings(max_examples=2000, deadline=None, database=None))
+
+
+@pytest.mark.parametrize(
+    "kind", ["polarity", "cardinality", "documentary_only", "identity", "attribute"]
+)
+def test_worlds_produce_every_conflict_kind(kind: str) -> None:
+    """Fixed budget: the conflict properties must not be vacuous."""
+
+    def has(r: Records) -> bool:
+        return any(c.kind == kind for s in r.snapshots for c in evaluate(r, s.id).conflicts)
+
+    find(worlds(), has, settings=settings(max_examples=300, deadline=None, database=None))
