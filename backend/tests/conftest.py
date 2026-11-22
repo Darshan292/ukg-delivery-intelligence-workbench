@@ -21,6 +21,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import URL, make_url
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -61,7 +62,17 @@ def db_url(request: pytest.FixtureRequest) -> Iterator[URL]:
     name = f"t_{uuid.uuid4().hex[:12]}"
     eng = create_engine(admin, isolation_level="AUTOCOMMIT")
     with eng.connect() as c:
-        c.execute(text(f'CREATE DATABASE "{name}"'))
+        # a linguistic default collation, so any comparison missing an explicit COLLATE "C"
+        # misorders keys ("Zz" < "aa" in bytes, the reverse in en-US); plain CREATE if no ICU
+        try:
+            c.execute(
+                text(
+                    f'CREATE DATABASE "{name}" TEMPLATE template0 ENCODING UTF8'
+                    " LOCALE_PROVIDER icu ICU_LOCALE 'en-US' LOCALE 'C'"
+                )
+            )
+        except DBAPIError:
+            c.execute(text(f'CREATE DATABASE "{name}"'))
     yield admin.set(database=name)
     with eng.connect() as c:
         c.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))

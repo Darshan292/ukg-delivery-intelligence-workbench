@@ -87,3 +87,24 @@ class Ids:
     export_locator: int
     design_locator: int
     s2_export_dv: int
+
+
+def has_supersession_cycle(r: Records) -> bool:
+    """Per scope (unscoped is its own scope), over every superseded event: a directed cycle."""
+    graph: dict[tuple[int | None, int], set[int]] = {}
+    for e in r.review_events:
+        if e.target_kind == "relationship" and e.successor_relationship_id is not None:
+            graph.setdefault((e.scope_snapshot_id, e.relationship_id), set()).add(
+                e.successor_relationship_id
+            )
+    for start_scope, start in list(graph):
+        seen: set[int] = set()
+        todo = [start]
+        while todo:
+            for nxt in graph.get((start_scope, todo.pop()), ()):
+                if nxt == start:
+                    return True
+                if nxt not in seen:
+                    seen.add(nxt)
+                    todo.append(nxt)
+    return False

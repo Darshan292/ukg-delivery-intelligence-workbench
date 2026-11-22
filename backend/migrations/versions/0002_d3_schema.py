@@ -278,6 +278,36 @@ BEGIN
 END $$;
 CREATE CONSTRAINT TRIGGER wb_document_version_rules AFTER INSERT ON public.document_version
   NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION public.wb_document_version_rules();
+
+CREATE FUNCTION public.wb_relationship_rules() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE s public.entity%ROWTYPE; t public.entity%ROWTYPE; profile text; spec public.catalogue_relationship_type%ROWTYPE;
+BEGIN
+  SELECT * INTO s FROM public.entity WHERE id = NEW.source_entity_id;
+  SELECT * INTO t FROM public.entity WHERE id = NEW.target_entity_id;
+  IF s.id IS NULL OR t.id IS NULL THEN RETURN NEW; END IF;  -- the foreign key reports it
+  IF s.product_profile = 'unknown' AND t.product_profile = 'unknown' THEN
+    RAISE EXCEPTION 'catalogue: relationship between unknown entities' USING ERRCODE = 'WB003';
+  END IF;
+  IF s.product_profile <> t.product_profile AND 'unknown' NOT IN (s.product_profile, t.product_profile) THEN
+    RAISE EXCEPTION 'profiles: relationship endpoints' USING ERRCODE = 'WB003';
+  END IF;
+  profile := CASE WHEN s.product_profile = 'unknown' THEN t.product_profile ELSE s.product_profile END;
+  SELECT * INTO spec FROM public.catalogue_relationship_type c WHERE c.product_profile = profile AND c.name = NEW.type;
+  IF spec.name IS NULL THEN
+    RAISE EXCEPTION 'catalogue: relationship type' USING ERRCODE = 'WB003';
+  END IF;
+  IF spec.qualifier_required <> (NEW.qualifier IS NOT NULL) THEN
+    RAISE EXCEPTION 'catalogue: qualifier' USING ERRCODE = 'WB003';
+  END IF;
+  -- explicit COLLATE: plpgsql row variables may not carry the column collation
+  IF NEW.type = 'same_as' AND (s.product_profile <> t.product_profile OR s.entity_type <> t.entity_type
+     OR NOT (s.natural_key COLLATE "C" < t.natural_key COLLATE "C")) THEN
+    RAISE EXCEPTION 'same_as: profile, type and key order' USING ERRCODE = 'WB003';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER wb_relationship_rules BEFORE INSERT ON public.relationship
+  FOR EACH ROW EXECUTE FUNCTION public.wb_relationship_rules();
 """
 
 

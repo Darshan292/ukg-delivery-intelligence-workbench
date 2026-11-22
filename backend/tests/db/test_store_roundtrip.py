@@ -6,14 +6,14 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from pydantic import ValidationError
 from sqlalchemy import Engine, text
 
 from app.domain.locators import PdfWordBbox
 from app.domain.records import Records
 from app.store import load, save
-from tests.db_helpers import norm, truncate
+from tests.db_helpers import has_supersession_cycle, norm, truncate
 from tests.domain.builders import World
 from tests.domain.strategies import worlds
 
@@ -25,6 +25,7 @@ from tests.domain.strategies import worlds
 )
 @given(r=worlds())
 def test_roundtrip_hypothesis(r: Records, store: Engine) -> None:
+    assume(not has_supersession_cycle(r))  # the DB is stricter than the domain only on cycles
     truncate(store)
     with store.begin() as c:
         save(c, r)
