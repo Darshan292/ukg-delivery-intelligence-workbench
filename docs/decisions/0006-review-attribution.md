@@ -1,6 +1,6 @@
 # Decision 0006: What the database proves about who reviewed
 
-Status: **proposed; for the owner's sign-off.** Residual risk recorded during Slice 5. No code change is made now.
+Status: **accepted by the owner for Milestone 1, 2026-11-22 (4); session-bound reviewers are a G-REAL requirement.** Residual risk recorded during Slice 5. No code change is made now.
 
 ## Context
 
