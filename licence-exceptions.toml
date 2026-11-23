@@ -123,3 +123,11 @@ licence = "Apache-2.0 AND LGPL-3.0-or-later AND MIT"
 reason = "Optional native library pulled in by Next.js (sharp), loaded dynamically, unmodified, not shipped in our source distribution. images.unoptimized = true, so we do not use it."
 approved_by = "owner"
 date = 2026-11-21
+
+[[exception]]
+name = "pypdfium2"
+versions = ">=5.15.2,<5.16.0"
+licence = "BSD-3-Clause, Apache-2.0, dependency licenses"
+reason = "Hard dependency of pdfplumber (rendering only; we do not call it). Wheels bundle PDFium binaries whose third-party notices are permissive (FTL, IJG, libpng, BSD/MIT/Apache/ISC/Zlib/Unicode); FreeType and libjpeg-turbo credits are in NOTICE. glibc (manylinux), macOS and Windows wheels only: CI is Ubuntu (glibc) and there is no backend Docker image; a test asserts the installed wheel tag."
+approved_by = "owner"
+date = 2026-11-22

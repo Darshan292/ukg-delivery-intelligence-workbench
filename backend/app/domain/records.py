@@ -23,6 +23,7 @@ from app.domain.model import (
     Entity,
     EntityTypeSpec,
     EntityVersion,
+    ExtractionBoundary,
     ProductProfile,
     Record,
     Relationship,
@@ -51,6 +52,7 @@ class Records(Record):
     claims: tuple[Claim, ...] = ()
     review_events: tuple[ReviewEvent, ...] = ()
     unresolved_references: tuple[UnresolvedReference, ...] = ()
+    extraction_boundaries: tuple[ExtractionBoundary, ...] = ()  # last: store FK order
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
@@ -173,6 +175,7 @@ def _ids(r: Records) -> None:
         ("claim", (x.id for x in r.claims)),
         ("review_event", (x.id for x in r.review_events)),  # one id space for both targets
         ("unresolved_reference", (x.id for x in r.unresolved_references)),
+        ("extraction_boundary", (x.id for x in r.extraction_boundaries)),
     ]
     for kind, ids in groups:
         seen: set[int] = set()
@@ -233,6 +236,9 @@ def _references(r: Records) -> None:
     for u in r.unresolved_references:
         need(u.holder_entity_id in r.entity_by_id, "unresolved_reference", u.id)
         need(u.locator_id in r.locator_by_id, "unresolved_reference", u.id)
+    for b in r.extraction_boundaries:
+        need(b.document_version_id in r.version_by_id, "extraction_boundary", b.id)
+        need(all(i in r.locator_by_id for i in b.locator_ids), "extraction_boundary", b.id)
 
 
 def _unique(rule: str, kind: str, items: Iterable[tuple[object, int]]) -> None:
@@ -259,6 +265,11 @@ def _uniqueness(r: Records) -> None:
     )
     _unique("locator content_key", "locator", ((content_key(x), x.id) for x in r.locators))
     _unique("claim dedup_key", "claim", ((c.dedup_key, c.id) for c in r.claims))
+    _unique(
+        "extraction boundary",
+        "extraction_boundary",
+        (((b.document_version_id, b.reason, b.locator_ids), b.id) for b in r.extraction_boundaries),
+    )
 
 
 def _catalogue(r: Records) -> None:
@@ -336,6 +347,14 @@ def _entity_versions(r: Records) -> None:
             raise _fail("entity_version: locator in another version", "entity_version", ev.id)
 
 
+def _boundaries(r: Records) -> None:
+    for b in r.extraction_boundaries:
+        if any(
+            r.locator_by_id[i].document_version_id != b.document_version_id for i in b.locator_ids
+        ):
+            raise _fail("boundary: locator in another version", "extraction_boundary", b.id)
+
+
 def _claim_scope(r: Records) -> None:
     for c in r.claims:
         scopes = {
@@ -386,6 +405,7 @@ _CHECKS: Final[tuple[Callable[[Records], None], ...]] = (
     _entity_versions,
     _claim_scope,
     _review_events,
+    _boundaries,
 )
 
 

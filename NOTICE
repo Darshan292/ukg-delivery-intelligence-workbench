@@ -11,3 +11,18 @@ This product's build tooling uses caniuse-lite (https://github.com/browserslist/
 by Ben Briggs and contributors, which packages browser-support data from
 caniuse.com by Alexis Deveria. Licensed under the Creative Commons Attribution
 4.0 International licence (CC-BY-4.0): https://creativecommons.org/licenses/by/4.0/
+
+Third-party software in the PDF toolchain
+-----------------------------------------
+pdfplumber depends on pypdfium2, whose wheels bundle the PDFium library and its
+third-party components (the PDF toolchain is not used for rendering by this product).
+Portions of this software are copyright (c) The FreeType Project (www.freetype.org).
+All rights reserved. FreeType is used under the FreeType Project License (FTL):
+https://freetype.org/license.html
+This software is based in part on the work of the Independent JPEG Group (IJG);
+the bundled libjpeg-turbo is licensed under the IJG licence and the BSD 3-clause
+licence: https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/LICENSE.md
+Other bundled components carry permissive licences (libpng, BSD, MIT, Apache-2.0, ISC,
+Zlib, Unicode); see the notices shipped inside the pypdfium2 wheel.
+Only glibc (manylinux), macOS and Windows wheels are supported. CI runs on Ubuntu (glibc);
+there is no backend Docker image. A test checks the installed pypdfium2 wheel tag.

@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.domain.model import Attribute, Entity, UnresolvedReference
+from app.domain.model import Attribute, Entity, ExtractionBoundary, UnresolvedReference
 from app.domain.records import Records
 from tests.domain.builders import CATALOGUE, World
 
@@ -40,7 +40,16 @@ def rich() -> Records:
             reason="missing_target",
         )
     )
-    return w.build()
+    return w.build().extended(
+        extraction_boundaries=(
+            ExtractionBoundary(
+                id=1,
+                document_version_id=e1.id,
+                reason="unknown_sheet",
+                locator_ids=(c1.locator_ids[0],),
+            ),
+        )
+    )
 
 
 def rebuild(r: Records, **repl: Any) -> Records:
