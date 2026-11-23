@@ -128,6 +128,6 @@ date = 2026-11-21
 name = "pypdfium2"
 versions = ">=5.15.2,<5.16.0"
 licence = "BSD-3-Clause, Apache-2.0, dependency licenses"
-reason = "Hard dependency of pdfplumber (rendering only; we do not call it). Wheels bundle PDFium binaries whose third-party notices are permissive (FTL, IJG, libpng, BSD/MIT/Apache/ISC/Zlib/Unicode); FreeType and libjpeg-turbo credits are in NOTICE. glibc wheels only: CI and Docker use Ubuntu, no musl."
+reason = "Hard dependency of pdfplumber (rendering only; we do not call it). Wheels bundle PDFium binaries whose third-party notices are permissive (FTL, IJG, libpng, BSD/MIT/Apache/ISC/Zlib/Unicode); FreeType and libjpeg-turbo credits are in NOTICE. glibc (manylinux), macOS and Windows wheels only: CI is Ubuntu (glibc) and there is no backend Docker image; a test asserts the installed wheel tag."
 approved_by = "owner"
 date = 2026-11-22

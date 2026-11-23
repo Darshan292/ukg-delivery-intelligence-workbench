@@ -24,4 +24,5 @@ the bundled libjpeg-turbo is licensed under the IJG licence and the BSD 3-clause
 licence: https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/LICENSE.md
 Other bundled components carry permissive licences (libpng, BSD, MIT, Apache-2.0, ISC,
 Zlib, Unicode); see the notices shipped inside the pypdfium2 wheel.
-Only glibc (manylinux), macOS and Windows wheels are supported; there are no musl wheels.
+Only glibc (manylinux), macOS and Windows wheels are supported. CI runs on Ubuntu (glibc);
+there is no backend Docker image. A test checks the installed pypdfium2 wheel tag.

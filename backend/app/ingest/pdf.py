@@ -97,7 +97,9 @@ def parse_pdf(
     locs: list[PdfWordBbox] = []
     pages: list[PageFragment] = []
     try:
-        for page, width, height, words in raw:
+        for n, (page, width, height, words) in enumerate(raw, 1):
+            if page != n:  # the page numbers are 1..n in order, or the reply is not trusted
+                raise ValueError
             ids: list[int] = []
             for text, x0, top, x1, bottom in words:
                 i = first_locator_id + len(locs)

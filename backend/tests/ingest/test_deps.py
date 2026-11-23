@@ -79,3 +79,18 @@ def test_pdfplumber_importable_lazily() -> None:
         check=False,
     )
     assert done.returncode == 0, done.stderr.decode()[-300:]
+
+
+def test_pypdfium2_wheel_is_not_musl() -> None:
+    import importlib.metadata as md
+    import sys
+
+    import pytest
+
+    try:
+        wheel = md.distribution("pypdfium2").read_text("WHEEL") or ""
+    except md.PackageNotFoundError:
+        pytest.skip("pypdfium2 not installed")
+    want = {"linux": "manylinux", "darwin": "macosx", "win32": "win"}[sys.platform]
+    tags = [ln for ln in wheel.splitlines() if ln.startswith("Tag:")]
+    assert tags and all(want in t and "musllinux" not in t for t in tags), tags

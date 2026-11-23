@@ -55,5 +55,9 @@ can differ run to run near the limit.
 `app/ingest/pdf.py` reuses `run_sandboxed` with `pdf_total_seconds` and `pdf_memory_bytes` in
 place of the worker values; pdfplumber is imported only inside the child. A wall-clock timeout
 or an oversized reply is `resource_limit`; the in-child per-page budget is `pdf_timeout`.
-Follow-up: pypdfium2 publishes musl wheels that uv cannot exclude cleanly (no libc marker),
-so the exception and NOTICE state glibc only; CI and Docker use Ubuntu.
+Encrypted PDFs (even with an empty user password) are refused with `pdf_encrypted`.
+A Flate decompression bomb is not detected as such: it ends in a failed allocation under
+`RLIMIT_AS` and surfaces as `pdf_malformed` (or `resource_limit`), bounded by the memory limit.
+pypdfium2 has no libc marker that uv can exclude, so musl wheels are not blocked at resolution:
+only glibc, macOS and Windows are supported (CI is Ubuntu; there is no backend Docker image), and
+`test_pypdfium2_wheel_is_not_musl` checks the installed wheel tag.
