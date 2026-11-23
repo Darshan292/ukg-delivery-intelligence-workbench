@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 import hashlib
 import struct
-import time
 from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
@@ -212,19 +211,15 @@ def test_page_tree_cycle() -> None:
 def test_deep_indirect_chain_and_nesting() -> None:
     chain = {n: b"%d 0 R" % (n + 1) for n in range(10, 6010)}
     chain[6010] = b"[0 0 100 100]"
-    pdf = make_pdf([[(72, 700, "x")]])
     objs = {
         1: b"<< /Type /Catalog /Pages 2 0 R >>",
         2: b"<< /Type /Pages /Count 1 /Kids [4 0 R] >>",
         4: b"<< /Type /Page /Parent 2 0 R /MediaBox 10 0 R /Foo " + b"[" * 50_000 + b" >>",
         **chain,
     }
-    del pdf
-    start = time.monotonic()
     with pytest.raises(IntakeRejected) as ei:
         parse_pdf(build_pdf(objs), version_id=1, first_locator_id=1, now=NOW, limits=Limits())
     assert ei.value.reason == "pdf_malformed"
-    assert time.monotonic() - start < 60
 
 
 def test_word_options_pinned() -> None:

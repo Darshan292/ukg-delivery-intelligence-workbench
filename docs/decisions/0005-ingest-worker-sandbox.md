@@ -61,3 +61,10 @@ A Flate decompression bomb is not detected as such: it ends in a failed allocati
 pypdfium2 has no libc marker that uv can exclude, so musl wheels are not blocked at resolution:
 only glibc, macOS and Windows are supported (CI is Ubuntu; there is no backend Docker image), and
 `test_pypdfium2_wheel_is_not_musl` checks the installed wheel tag.
+
+The parent's pre-load scanner (`app/ingest/ooxml.py`) imports openpyxl's own workbook-part
+finder, `Manifest` and `range_boundaries` on the first xlsx scan, deliberately, so that it
+resolves the workbook part exactly as openpyxl will (blocker B1). So openpyxl and, through it,
+the PIL module are imported in the parent. No image or workbook is decoded there: openpyxl loads
+workbooks only in the sandbox child. Replacing those helpers with our own code would reintroduce
+the scanner/openpyxl differential. Importing `app.ingest.*` alone loads none of them.
