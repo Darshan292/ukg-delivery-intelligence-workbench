@@ -22,7 +22,7 @@ REASONS = (
     "unknown_sheet", "ambiguous_sheet", "unrecognised_column", "missing_key", "duplicate_key",
     "duplicate_value", "ambiguous_target", "self_reference", "missing_qualifier",
     "no_cached_value", "error_value", "unsupported_value", "invalid_profile",
-    "unknown_profile_entity",
+    "unknown_profile_entity", "hidden_cell",
 )  # fmt: skip
 
 DDL = """

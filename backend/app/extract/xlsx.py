@@ -102,15 +102,27 @@ class _Cell:
 _BAD: dict[str, BoundaryReason] = {"no_cached": "no_cached_value", "error": "error_value"}
 
 
+def _cell_kind(formula: str | None, value_type: str, value: JsonScalar) -> str:
+    """The reading of one cell. A formula without a cached value is `no_cached` (S4-P5): it is
+    never evaluated or parsed."""
+    if formula is not None and value_type == "empty":
+        return "no_cached"
+    if value_type == "string":
+        return "string" if str(value).strip() else "blank"
+    return value_type
+
+
 def _bad_reason(kind: str) -> BoundaryReason:
     return _BAD.get(kind, "unsupported_value")
 
 
 # owner question S4-P3 (pending): hidden rows, columns and sheets are ordinary data
-def _extractable(row_hidden: bool, column_hidden: bool, sheet_state: str) -> bool:
-    """hidden rows, columns and sheets are ordinary data
-    (hidden is not deleted). The flags live in the IR only; they are not persisted in M1."""
-    return True
+def _hidden_policy(
+    row_hidden: bool, column_hidden: bool, sheet_state: str
+) -> Literal["extract", "boundary"]:
+    """hidden is not deleted: extract as ordinary data. A different answer returns "boundary"
+    and the cell is stated as `hidden_cell`, never blanked. The flags live in the IR only."""
+    return "extract"
 
 
 # owner question S4-P6 (pending): a declared notes sheet is structural, no boundary
@@ -134,8 +146,11 @@ def _assertion_basis() -> Basis:
     return "explicit_source"
 
 
-def _load(records: Records, parsed: ParsedDocument) -> dict[str, dict[tuple[int, int], _Cell]]:
+def _load(
+    records: Records, parsed: ParsedDocument
+) -> tuple[dict[str, dict[tuple[int, int], _Cell]], dict[str, list[int]]]:
     sheets: dict[str, dict[tuple[int, int], _Cell]] = {}
+    hidden: dict[str, list[int]] = {}
     state = {s.name: s.state for s in parsed.sheets}
     for f in parsed.cells:
         loc = records.locator_by_id[f.locator_id]
@@ -143,14 +158,14 @@ def _load(records: Records, parsed: ParsedDocument) -> dict[str, dict[tuple[int,
             raise ValueError("extract: not a cell locator")
         letters, row = coordinate_from_string(loc.cell)
         col = column_index_from_string(letters)
-        if f.formula is not None and f.value_type == "empty":
-            kind = "no_cached"  # a formula is never evaluated or parsed
-        elif f.value_type == "string":
-            kind = "string" if str(f.value).strip() else "blank"
-        else:
-            kind = f.value_type
-        if not _extractable(f.row_hidden, f.column_hidden, state.get(loc.sheet, "visible")):
-            kind = "blank"
+        kind = _cell_kind(f.formula, f.value_type, f.value)
+        if _hidden_policy(
+            f.row_hidden, f.column_hidden, state.get(loc.sheet, "visible")
+        ) == "boundary" and (
+            f.row_hidden or f.column_hidden or state.get(loc.sheet, "visible") != "visible"
+        ):
+            hidden.setdefault(loc.sheet, []).append(f.locator_id)
+            continue
         span = (col, col)
         if f.merged_range:
             lo, _, hi, _ = range_boundaries(f.merged_range)
@@ -158,7 +173,7 @@ def _load(records: Records, parsed: ParsedDocument) -> dict[str, dict[tuple[int,
         sheets.setdefault(loc.sheet, {})[(row, col)] = _Cell(
             f.locator_id, loc.sheet, row, col, kind, f.value, span
         )
-    return sheets
+    return sheets, hidden
 
 
 # ---- the run ------------------------------------------------------------------------------
@@ -324,7 +339,9 @@ def extract_xlsx(
 ) -> Extracted:
     _prechecks(records, parsed, catalogue)
     run = _Run(records, parsed, catalogue, now)
-    sheets = _load(records, parsed)
+    sheets, hidden = _load(records, parsed)
+    for name in sorted(hidden):
+        run.bound("hidden_cell", hidden[name])  # S4-P3 answered "do not extract hidden"
     for name in sorted(sheets):
         run.scan(name, sheets[name])
     return _finish(run)

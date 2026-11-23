@@ -213,6 +213,7 @@ BoundaryReason = Literal[
     "invalid_profile",
     # decisions 0003 Q7 and 0007: the entity itself is stated as an extraction boundary
     "unknown_profile_entity",
+    "hidden_cell",
 ]
 
 
