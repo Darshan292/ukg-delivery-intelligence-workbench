@@ -29,31 +29,39 @@ def extract_pdf(data: bytes, limits: Limits) -> object:
     start = time.monotonic()
     pages: list[list[Any]] = []
     n_words = 0
-    with pdfplumber.open(BytesIO(data)) as pdf:
-        if sum(len(list(x.get_objids())) for x in pdf.doc.xrefs) > limits.pdf_max_objects:
-            raise IntakeRejected("pdf_too_many_objects")
-        # count lazily, stopping at cap + 1: pdf.pages would build every Page object first
-        if sum(1 for _ in islice(PDFPage.create_pages(pdf.doc), limits.pdf_max_pages + 1)) > (
-            limits.pdf_max_pages
-        ):
-            raise IntakeRejected("pdf_too_many_pages")
-        for done, page in enumerate(pdf.pages, 1):
-            words = page.extract_words(
-                x_tolerance=3, y_tolerance=3, keep_blank_chars=False, use_text_flow=False
-            )
-            n_words += len(words)
-            if n_words > limits.pdf_max_words:
-                raise IntakeRejected("pdf_too_many_words")
-            pages.append(
-                [
-                    page.page_number,
-                    float(page.width),
-                    float(page.height),
-                    [[w["text"], w["x0"], w["top"], w["x1"], w["bottom"]] for w in words],
-                ]
-            )
-            if time.monotonic() - start > limits.pdf_page_seconds * done:
-                raise IntakeRejected("pdf_timeout")
+    # no `with`: PDF.close() walks pdf.pages, which builds every Page; the child exits anyway
+    pdf = pdfplumber.open(BytesIO(data))
+    if sum(len(list(x.get_objids())) for x in pdf.doc.xrefs) > limits.pdf_max_objects:
+        raise IntakeRejected("pdf_too_many_objects")
+    # count lazily, stopping at cap + 1: pdf.pages would build every Page object first
+    if sum(1 for _ in islice(PDFPage.create_pages(pdf.doc), limits.pdf_max_pages + 1)) > (
+        limits.pdf_max_pages
+    ):
+        raise IntakeRejected("pdf_too_many_pages")
+    for done, page in enumerate(pdf.pages, 1):
+        words = page.extract_words(
+            x_tolerance=3,
+            y_tolerance=3,
+            x_tolerance_ratio=None,
+            y_tolerance_ratio=None,
+            keep_blank_chars=False,
+            use_text_flow=False,
+            split_at_punctuation=False,
+            expand_ligatures=False,
+        )
+        n_words += len(words)
+        if n_words > limits.pdf_max_words:
+            raise IntakeRejected("pdf_too_many_words")
+        pages.append(
+            [
+                page.page_number,
+                float(page.width),
+                float(page.height),
+                [[w["text"], w["x0"], w["top"], w["x1"], w["bottom"]] for w in words],
+            ]
+        )
+        if time.monotonic() - start > limits.pdf_page_seconds * done:
+            raise IntakeRejected("pdf_timeout")
     if not pages:
         raise IntakeRejected("pdf_malformed")
     return pages

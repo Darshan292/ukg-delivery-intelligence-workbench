@@ -241,9 +241,10 @@ def test_page_cap_fires_before_any_page_is_extracted() -> None:
 
 
 def test_many_pages_rejected_without_materialising_them() -> None:
+    data = _page_tree(60_000)
     start = time.monotonic()
-    _rejects(_page_tree(60_000), "pdf_too_many_pages", Limits(pdf_max_objects=10**6))
-    assert time.monotonic() - start < 6  # building 60k Page objects first takes longer
+    _rejects(data, "pdf_too_many_pages", Limits(pdf_max_objects=10**6))
+    assert time.monotonic() - start < 3  # building 60k Page objects first takes about 4 s
 
 
 def _cmap_pdf() -> bytes:
@@ -265,3 +266,38 @@ def _cmap_pdf() -> bytes:
 
 def test_nul_in_extracted_text_is_rejected() -> None:
     _rejects(_cmap_pdf(), "pdf_malformed")
+
+
+def _simple_pdf(font: bytes, content: bytes, extra: dict[int, bytes] | None = None) -> bytes:
+    return build_pdf(
+        {
+            1: b"<< /Type /Catalog /Pages 2 0 R >>",
+            2: b"<< /Type /Pages /Count 1 /Kids [4 0 R] >>",
+            3: font,
+            4: b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+            5: b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content),
+            **(extra or {}),
+        }
+    )
+
+
+def test_ligature_is_not_expanded() -> None:
+    font = (
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+        b"/Encoding << /Type /Encoding /Differences [1 /fi] >> >>"
+    )
+    pdf = _simple_pdf(font, b"BT /F1 12 Tf 72 700 Td (\\001) Tj ET")
+    locs, _ = parse_pdf(pdf, version_id=1, first_locator_id=1, now=NOW, limits=Limits())
+    assert [x.snippet for x in locs] == ["ﬁ"]  # one ligature character, not "fi"
+
+
+def test_punctuation_is_not_split() -> None:
+    locs, _ = parse_pdf(
+        make_pdf([[(72, 700, "OT-1.2/x")]]),
+        version_id=1,
+        first_locator_id=1,
+        now=NOW,
+        limits=Limits(),
+    )
+    assert [x.snippet for x in locs] == ["OT-1.2/x"]
