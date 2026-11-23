@@ -3,10 +3,12 @@
 import time
 from datetime import UTC, datetime
 from io import BytesIO
+from typing import Any
 
 import pdfplumber
 import pytest
 
+import app.ingest.pdf as pdf_mod
 from app.domain.model import Actor, Snapshot
 from app.domain.records import Records
 from app.ingest.errors import IntakeRejected, Limits, Reason
@@ -200,17 +202,20 @@ def test_word_options_pinned() -> None:
     assert [x.snippet for x in locs] == ["abcd"]
 
 
-@pytest.mark.parametrize(
-    "reply",
-    [
-        [[0, 612, 792, []]],  # page 0
-        [[1, 612, 792, [[MARKER, 5, 1, 4, 2]]]],  # x0 > x1
-        [[1, 612, 792, [[MARKER, float("nan"), 1, 4, 2]]]],
-        [[1, 612, 792, [[MARKER]]]],  # wrong shape
-    ],
-)
+REPLIES: list[list[list[Any]]] = [
+    [[0, 612, 792, []]],  # page 0
+    [[1, 612, 792, [[MARKER, 5, 1, 4, 2]]]],  # x0 > x1
+    [[1, 612, 792, [[MARKER, float("nan"), 1, 4, 2]]]],
+    [[1, 612, 792, [[MARKER]]]],  # wrong shape
+]
+
+
+@pytest.mark.parametrize("reply", REPLIES)
 def test_hostile_worker_reply_is_pdf_malformed(
-    monkeypatch: pytest.MonkeyPatch, reply: list[object]
+    monkeypatch: pytest.MonkeyPatch, reply: list[list[Any]]
 ) -> None:
-    monkeypatch.setattr("app.ingest.pdf.run_pdf_worker", lambda data, limits: reply)
+    def fake(data: bytes, limits: Limits) -> list[list[Any]]:  # noqa: ARG001
+        return reply
+
+    monkeypatch.setattr(pdf_mod, "run_pdf_worker", fake)
     _rejects(b"%PDF-", "pdf_malformed")
