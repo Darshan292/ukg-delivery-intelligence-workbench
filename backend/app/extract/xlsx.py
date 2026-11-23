@@ -15,7 +15,7 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Self
+from typing import Literal, Self
 
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string, range_boundaries
 from pydantic import SkipValidation, model_validator
@@ -24,6 +24,7 @@ from app.domain.locators import XlsxCell
 from app.domain.model import (
     Attribute,
     BoundaryReason,
+    Claim,
     Entity,
     EntityVersion,
     ExtractionBoundary,
@@ -31,7 +32,9 @@ from app.domain.model import (
     JsonScalar,
     ProductProfile,
     Record,
+    Relationship,
     SortedIds0,
+    UnresolvedReference,
     normalise_key_v1,
 )
 from app.domain.records import Records
@@ -45,6 +48,8 @@ from app.extract.catalogue import (
 from app.ingest.fragments import ParsedDocument
 
 log = logging.getLogger(__name__)
+
+UnresolvedReason = Literal["missing_target", "uncatalogued_type", "unknown_profile"]
 
 
 class AlreadyExtracted(ValueError):
@@ -132,6 +137,12 @@ class _Row:
 
 
 _Triple = tuple[ProductProfile, str, str]
+_EdgeKey = tuple[str, _Triple, _Triple, str | None]  # type, source, target, qualifier
+_Unresolved = tuple[_Triple, str, int, UnresolvedReason]  # holder, raw, locator id, reason
+
+
+def _rel_sort(k: _EdgeKey) -> tuple[str, _Triple, _Triple, str]:
+    return (k[0], k[1], k[2], k[3] or "")
 
 
 @dataclass
@@ -222,6 +233,8 @@ def _roles(spec: SheetSpec) -> dict[str, str]:
     out = {header_norm(spec.key_header): "key"}
     for a in spec.attributes:
         out[header_norm(a.header)] = f"attr:{a.name}"
+    for rc in spec.references:
+        out[header_norm(rc.header)] = f"ref:{header_norm(rc.header)}"
     return out
 
 
@@ -259,7 +272,7 @@ def extract_xlsx(
 
 
 def _finish(run: _Run) -> Extracted:
-    r, parsed = run.records, run.parsed
+    r, parsed, cat = run.records, run.parsed, run.cat
     vid = parsed.document_version_id
     ver = r.version_by_id[vid]
     profile = parsed.product_profile
@@ -275,14 +288,15 @@ def _finish(run: _Run) -> Extracted:
             run.bound(_bad_reason(kc.kind), whole)
             continue
         key = normalise_key_v1(str(kc.value))
-        ents.append(_Ent(row.spec, row, key, profile, kc))
+        ents.append(
+            _Ent(row.spec, row, key, profile, kc, triple=(profile, row.spec.entity_type, key))
+        )
     existing = {e.key: e for e in r.entities}
-    for e in ents:
-        e.triple = (e.profile, e.spec.entity_type, e.key)
     new_ents = sorted({e.triple for e in ents} - existing.keys())
     ent_id = {t: existing[t].id for t in existing}
     for i, t in enumerate(new_ents, _next(r.entities)):
         ent_id[t] = i
+    resolver = _Resolver(run, ents)
     versions: list[EntityVersion] = []
     for i, e in enumerate(sorted(ents, key=lambda e: e.triple), _next(r.entity_versions)):
         attrs: list[Attribute] = []
@@ -292,6 +306,8 @@ def _finish(run: _Run) -> Extracted:
             if role.startswith("attr:"):
                 attrs.append(Attribute(name=role[5:], value=c.value, locator_id=c.id))
                 ids.append(c.id)
+            elif role.startswith("ref:"):
+                resolver.reference(e, role, c)
         versions.append(
             EntityVersion(
                 id=i,
@@ -302,6 +318,49 @@ def _finish(run: _Run) -> Extracted:
                 locator_ids=tuple(ids),
             )
         )
+    # relationships: reuse an existing key, else a new row in content order
+    have = {
+        (x.type, x.source_entity_id, x.target_entity_id, x.qualifier): x.id for x in r.relationships
+    }
+    rel_id: dict[_EdgeKey, int] = {}
+    new_rels: list[_EdgeKey] = []
+    for k in sorted(resolver.edges, key=_rel_sort):
+        known = have.get((k[0], ent_id[k[1]], ent_id[k[2]], k[3]))
+        if known is None:
+            new_rels.append(k)
+        else:
+            rel_id[k] = known
+    for i, k in enumerate(new_rels, _next(r.relationships)):
+        rel_id[k] = i
+    pairs = [
+        (k, ids) for k in sorted(resolver.edges, key=_rel_sort) for ids in sorted(resolver.edges[k])
+    ]
+    claims = [
+        Claim(
+            id=i,
+            relationship_id=rel_id[k],
+            basis="explicit_source",
+            polarity="present",
+            method=cat.method,
+            confidence=None,
+            scope_snapshot_id=ver.snapshot_id,
+            locator_ids=ids,
+            created_at=run.now,
+        )
+        for i, (k, ids) in enumerate(pairs, _next(r.claims))
+    ]
+    unresolved = [
+        UnresolvedReference(
+            id=i,
+            holder_entity_id=ent_id[holder],
+            raw_reference=raw,
+            locator_id=loc,
+            reason=reason,
+        )
+        for i, (holder, raw, loc, reason) in enumerate(
+            sorted(resolver.unresolved, key=lambda u: (u[2], u[3])), _next(r.unresolved_references)
+        )
+    ]
     bounds = tuple(
         ExtractionBoundary(id=i, document_version_id=vid, reason=reason, locator_ids=ids)
         for i, (reason, ids) in enumerate(
@@ -314,11 +373,81 @@ def _finish(run: _Run) -> Extracted:
             for t in new_ents
         ),
         entity_versions=tuple(versions),
+        relationships=tuple(
+            Relationship(
+                id=rel_id[k],
+                type=k[0],
+                source_entity_id=ent_id[k[1]],
+                target_entity_id=ent_id[k[2]],
+                qualifier=k[3],
+                created_at=run.now,
+            )
+            for k in new_rels
+        ),
+        claims=tuple(claims),
+        unresolved_references=tuple(unresolved),
         extraction_boundaries=bounds,
     )
-    log.info("extracted %d entities, %d boundaries", len(new_ents), len(bounds))
+    log.info(
+        "extracted %d entities, %d relationships, %d boundaries",
+        len(new_ents),
+        len(new_rels),
+        len(bounds),
+    )
     return Extracted(
         records=out,
         document_version_id=vid,
         structural_locator_ids=tuple(sorted(run.structural)),
     )
+
+
+class _Resolver:
+    """Reference resolution (plan rules 1 to 9); collects edges and unresolved references."""
+
+    def __init__(self, run: _Run, ents: list[_Ent]) -> None:
+        self.run = run
+        self.profile = run.parsed.product_profile
+        self.doc: dict[tuple[str, str], _Ent] = {(e.triple[1], e.triple[2]): e for e in ents}
+        self.types_of_key: dict[str, set[str]] = {}
+        for e in ents:
+            self.types_of_key.setdefault(e.key, set()).add(e.triple[1])
+        for x in run.records.entities:
+            self.types_of_key.setdefault(x.natural_key, set()).add(x.entity_type)
+        self.known = {x.key for x in run.records.entities}
+        self.scoped = {
+            t.name: t.snapshot_scoped
+            for t in run.records.catalogue_by_profile[self.profile].entity_types
+        }
+        self.snapshot = run.records.version_by_id[run.parsed.document_version_id].snapshot_id
+        self.refcols = {
+            f"ref:{header_norm(rc.header)}": rc for s in run.cat.sheets for rc in s.references
+        }
+        self.edges: dict[_EdgeKey, list[tuple[int, ...]]] = {}
+        self.unresolved: list[_Unresolved] = []
+
+    def target(self, target_type: str, k: str) -> _Triple | None:
+        hit = self.doc.get((target_type, k))
+        if hit is not None:
+            return hit.triple
+        if self.snapshot is not None and self.scoped.get(target_type, False):
+            return None  # a snapshot export defines its own scoped objects
+        for p in (self.profile, "unknown"):
+            if (p, target_type, k) in self.known:
+                return (p, target_type, k)  # type: ignore[return-value]
+        return None
+
+    def reference(self, e: _Ent, role: str, c: _Cell) -> None:
+        rc = self.refcols[role]
+        if c.kind != "string":
+            self.run.bound(_bad_reason(c.kind), [c])
+            return
+        raw = str(c.value)
+        k = normalise_key_v1(raw)
+        tgt = self.target(rc.target_type, k)
+        if tgt is None:
+            other = self.types_of_key.get(k, set()) - {rc.target_type}
+            reason: UnresolvedReason = "uncatalogued_type" if other else "missing_target"
+            self.unresolved.append((e.triple, raw, c.id, reason))
+            return
+        key: _EdgeKey = (rc.relationship_type, e.triple, tgt, None)
+        self.edges.setdefault(key, []).append(tuple(sorted((e.key_cell.id, c.id))))
