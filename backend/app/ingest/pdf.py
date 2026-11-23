@@ -12,6 +12,7 @@ import dataclasses
 import time
 from datetime import datetime
 from io import BytesIO
+from itertools import islice
 from typing import Any
 
 from app.domain.locators import PdfWordBbox
@@ -23,15 +24,19 @@ from app.ingest.sandbox import run_sandboxed
 def extract_pdf(data: bytes, limits: Limits) -> object:
     """Runs in the sandbox child. Any exception other than IntakeRejected becomes pdf_malformed."""
     import pdfplumber  # noqa: PLC0415  (lazy: after the child's rlimits, never in the parent)
+    from pdfminer.pdfpage import PDFPage  # noqa: PLC0415
 
     start = time.monotonic()
     pages: list[list[Any]] = []
     n_words = 0
     with pdfplumber.open(BytesIO(data)) as pdf:
-        if len(pdf.pages) > limits.pdf_max_pages:  # before any page is parsed
-            raise IntakeRejected("pdf_too_many_pages")
         if sum(len(list(x.get_objids())) for x in pdf.doc.xrefs) > limits.pdf_max_objects:
             raise IntakeRejected("pdf_too_many_objects")
+        # count lazily, stopping at cap + 1: pdf.pages would build every Page object first
+        if sum(1 for _ in islice(PDFPage.create_pages(pdf.doc), limits.pdf_max_pages + 1)) > (
+            limits.pdf_max_pages
+        ):
+            raise IntakeRejected("pdf_too_many_pages")
         for done, page in enumerate(pdf.pages, 1):
             words = page.extract_words(
                 x_tolerance=3, y_tolerance=3, keep_blank_chars=False, use_text_flow=False

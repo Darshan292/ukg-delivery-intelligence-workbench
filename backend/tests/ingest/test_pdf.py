@@ -219,3 +219,49 @@ def test_hostile_worker_reply_is_pdf_malformed(
 
     monkeypatch.setattr(pdf_mod, "run_pdf_worker", fake)
     _rejects(b"%PDF-", "pdf_malformed")
+
+
+def _page_tree(n: int) -> bytes:
+    kids = " ".join(f"{i} 0 R" for i in range(10, 10 + n))
+    objs = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: f"<< /Type /Pages /Count {n} /Kids [{kids}] >>".encode(),
+        **{i: b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>" for i in range(10, 10 + n)},
+    }
+    return build_pdf(objs)
+
+
+def test_page_cap_fires_before_any_page_is_extracted() -> None:
+    # page_seconds=0 would give pdf_timeout if the cap ran after the first extraction
+    _rejects(
+        make_pdf([[(72, 700, "a")], [], []]),
+        "pdf_too_many_pages",
+        Limits(pdf_max_pages=2, pdf_page_seconds=0),
+    )
+
+
+def test_many_pages_rejected_without_materialising_them() -> None:
+    start = time.monotonic()
+    _rejects(_page_tree(60_000), "pdf_too_many_pages", Limits(pdf_max_objects=10**6))
+    assert time.monotonic() - start < 6  # building 60k Page objects first takes longer
+
+
+def _cmap_pdf() -> bytes:
+    cmap = b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n"
+    cmap += b"1 begincodespacerange <00> <FF> endcodespacerange\n"
+    cmap += b"1 beginbfchar <41> <0000> endbfchar\nendcmap end end"
+    content = b"BT /F1 12 Tf 72 700 Td (AB) Tj ET"
+    objs = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: b"<< /Type /Pages /Count 1 /Kids [4 0 R] >>",
+        3: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 6 0 R >>",
+        4: b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+        5: b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content),
+        6: b"<< /Length %d >>\nstream\n%s\nendstream" % (len(cmap), cmap),
+    }
+    return build_pdf(objs)
+
+
+def test_nul_in_extracted_text_is_rejected() -> None:
+    _rejects(_cmap_pdf(), "pdf_malformed")
