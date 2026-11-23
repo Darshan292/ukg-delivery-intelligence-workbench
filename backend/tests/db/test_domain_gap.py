@@ -26,6 +26,9 @@ VERS = st.one_of(  # name@version
     TEXT, st.tuples(TEXT, TEXT).map(lambda t: f"{t[0]}@{t[1]}"), st.just("a@1")
 )
 IDS = st.sampled_from([-1, 0, 500])
+# claim has four independent fields that must all be valid at once; with uniform draws about
+# 1 run in 10 generated no accepted row and failed the positive control (seed 2, 14, 21, 38)
+IDS_MOSTLY_VALID = st.sampled_from([-1, 0] + [500] * 6)
 
 
 def test_python_whitespace_is_blank_to_the_database(store: Engine) -> None:
@@ -108,8 +111,9 @@ CASES: dict[str, Callable[[Ids], tuple[str, dict[str, Any]]]] = {
         "INSERT INTO claim (id, relationship_id, basis, polarity, method, confidence, model_id,"
         " prompt_version, scope_snapshot_id, locator_ids, created_at) VALUES (:i, :rel,"
         " 'llm_suggestion', 'present', :m, 0.5, :mi, :pv, :s, CAST(:loc AS bigint[]), now())",
-        i=IDS, rel=st.just(i.scoped_rel), m=VERS, mi=TEXT, pv=TEXT, s=st.just(i.s1),
-        loc=st.just([i.export_locator]),
+        i=IDS_MOSTLY_VALID, rel=st.just(i.scoped_rel), m=st.one_of(VERS, GOOD, GOOD, GOOD),
+        mi=st.one_of(TEXT, GOOD, GOOD, GOOD), pv=st.one_of(TEXT, GOOD, GOOD, GOOD),
+        s=st.just(i.s1), loc=st.just([i.export_locator]),
     ),
     "review_event_id": lambda i: _case(
         "INSERT INTO review_event (id, target_kind, relationship_id, scope_snapshot_id, verdict,"
