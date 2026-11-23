@@ -43,7 +43,7 @@ def _lineage_order(versions: tuple[d.DocumentVersion, ...]) -> list[d.DocumentVe
     return sorted(versions, key=lambda v: (depth(v), v.id))
 
 
-def _rows(r: Records, field: str, lineage: bool | None) -> list[dict[str, Any]]:
+def _rows(items: tuple[Any, ...], field: str, lineage: bool | None) -> list[dict[str, Any]]:
     # columns equal the model fields, except where noted
     match field:
         case "catalogues":
@@ -51,7 +51,7 @@ def _rows(r: Records, field: str, lineage: bool | None) -> list[dict[str, Any]]:
         case "document_versions":
             rows = [
                 v.model_dump()
-                for v in _lineage_order(r.document_versions)
+                for v in _lineage_order(items)
                 if lineage is None or lineage == (v.supersedes_version_id is not None)
             ]
             for row in rows:  # a column that is named is a column that needs the privilege
@@ -60,7 +60,7 @@ def _rows(r: Records, field: str, lineage: bool | None) -> list[dict[str, Any]]:
             return rows
         case "locators":
             out: list[dict[str, Any]] = []
-            for loc in r.locators:
+            for loc in items:
                 full = loc.model_dump(mode="json")
                 row = {k: getattr(loc, k) for k in _LOC_COLUMNS}
                 row["locator"] = {k: v for k, v in full.items() if k not in _LOC_COLUMNS}
@@ -76,7 +76,7 @@ def _rows(r: Records, field: str, lineage: bool | None) -> list[dict[str, Any]]:
                         for a in ev.attributes
                     ],
                 }
-                for ev in r.entity_versions
+                for ev in items
             ]
         case "claims":
             return [
@@ -84,12 +84,17 @@ def _rows(r: Records, field: str, lineage: bool | None) -> list[dict[str, Any]]:
                     **c.model_dump(exclude={"locator_ids"}),
                     "locator_ids": list(c.locator_ids),
                 }
-                for c in r.claims
+                for c in items
             ]
         case "actors":
-            return [{**a.model_dump(exclude={"roles"}), "roles": sorted(a.roles)} for a in r.actors]
+            return [{**a.model_dump(exclude={"roles"}), "roles": sorted(a.roles)} for a in items]
+        case "extraction_boundaries":
+            return [
+                {**b.model_dump(exclude={"locator_ids"}), "locator_ids": list(b.locator_ids)}
+                for b in items
+            ]
         case _:
-            return [x.model_dump() for x in getattr(r, field)]
+            return [x.model_dump() for x in items]
 
 
 _TABLE: Final[dict[str, type[DeclarativeBase]]] = {
@@ -103,6 +108,7 @@ _TABLE: Final[dict[str, type[DeclarativeBase]]] = {
     "relationships": m.Relationship,
     "claims": m.Claim,
     "unresolved_references": m.UnresolvedReference,
+    "extraction_boundaries": m.ExtractionBoundary,
 }
 
 
@@ -113,27 +119,29 @@ def save(
     lineage: bool | None = None,
 ) -> None:
     """`lineage` splits document versions: False saves only plain ones, True only those that
-    supersede another (a human act, so the ingest role cannot write them), None saves both."""
+    supersede another (a human act, so the ingest role cannot write them), None saves both.
+    """
     for field in ALL:  # Records field order is FK order
         if field not in fields:
             continue
+        items = getattr(r, field)
         if field == "catalogues":
-            _save_catalogues(conn, r)
+            _save_catalogues(conn, items)
         elif field == "review_events":
             # (at, id) order; one statement per row; id and at are never client-supplied
-            for e in sorted(r.review_events, key=lambda e: (e.at, e.id)):
+            for e in sorted(items, key=lambda e: (e.at, e.id)):
                 row = e.model_dump(exclude={"id", "at"})
                 conn.execute(insert(m.ReviewEvent), row)
         elif field == "document_versions" and lineage is None:
             # one statement shape per call: rows with and without supersedes_version_id differ
             for part in (False, True):
-                if rows := _rows(r, field, part):
+                if rows := _rows(items, field, part):
                     conn.execute(insert(m.DocumentVersion), rows)
-        elif rows := _rows(r, field, lineage):
+        elif rows := _rows(items, field, lineage):
             conn.execute(insert(_TABLE[field]), rows)
 
 
-def _save_catalogues(conn: Connection, r: Records) -> None:
+def _save_catalogues(conn: Connection, catalogues: tuple[d.Catalogue, ...]) -> None:
     # an empty catalogue (no types) stores nothing: no entity could use it
     ets = [
         {
@@ -142,7 +150,7 @@ def _save_catalogues(conn: Connection, r: Records) -> None:
             "snapshot_scoped": t.snapshot_scoped,
             "display_only_attributes": list(t.display_only_attributes),
         }
-        for c in r.catalogues
+        for c in catalogues
         for t in c.entity_types
     ]
     rts = [
@@ -152,7 +160,7 @@ def _save_catalogues(conn: Connection, r: Records) -> None:
             "qualifier_required": t.qualifier_required,
             "single_valued_for": [list(p) for p in t.single_valued_for],
         }
-        for c in r.catalogues
+        for c in catalogues
         for t in c.relationship_types
     ]
     if ets:
@@ -283,4 +291,5 @@ def load(conn: Connection) -> Records:
         claims=claims,
         review_events=tuple(_event(row) for row in by_id(m.ReviewEvent)),
         unresolved_references=build(d.UnresolvedReference, m.UnresolvedReference),
+        extraction_boundaries=build(d.ExtractionBoundary, m.ExtractionBoundary, locator_ids=""),
     )

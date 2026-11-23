@@ -210,3 +210,16 @@ class UnresolvedReference(Base):
     raw_reference: Mapped[str] = mapped_column(Text)
     locator_id: Mapped[int] = mapped_column(_PK, ForeignKey("evidence_locator.id"))
     reason: Mapped[str] = mapped_column(Text)
+
+
+class ExtractionBoundary(Base):
+    __tablename__ = "extraction_boundary"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_version_id", "reason", "locator_ids", name="uq_extraction_boundary"
+        ),
+    )
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=False)
+    document_version_id: Mapped[int] = mapped_column(_PK, ForeignKey("document_version.id"))
+    reason: Mapped[str] = mapped_column(Text)
+    locator_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger))

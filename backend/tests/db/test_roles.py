@@ -10,7 +10,7 @@ from tests.db_helpers import Ids, sqlstate_raised
 
 INGEST_INSERT = {
     "snapshot", "document", "document_version", "evidence_locator", "entity", "entity_version",
-    "relationship", "claim", "unresolved_reference",
+    "relationship", "claim", "unresolved_reference", "extraction_boundary",
 }  # fmt: skip
 REVIEW_COLS = {
     "target_kind", "claim_id", "relationship_id", "scope_snapshot_id", "verdict", "reason",
