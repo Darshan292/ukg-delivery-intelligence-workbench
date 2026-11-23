@@ -116,6 +116,12 @@ def test_locator_requires_document_version_and_versioned_extractor() -> None:
         LOCATOR_ADAPTER.validate_python({**XLSX, "extractor": "openpyxl"})
 
 
+@pytest.mark.parametrize("raw", [XLSX, PDF])
+def test_snippet_rejects_nul(raw: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):  # Postgres text cannot store NUL
+        LOCATOR_ADAPTER.validate_python({**raw, "snippet": "a\x00b"})
+
+
 def test_locator_is_frozen() -> None:
     loc = LOCATOR_ADAPTER.validate_python(XLSX)
     with pytest.raises(ValidationError):
@@ -135,7 +141,9 @@ def test_locator_content_key_ignores_id_and_time() -> None:
 _common = {
     "id": st.integers(1, 10**6),
     "document_version_id": st.integers(1, 10**6),
-    "snippet": st.text(),
+    "snippet": st.text(
+        alphabet=st.characters(blacklist_characters="\x00", blacklist_categories=("Cs",))
+    ),
     "extractor": st.just("x@1"),
     "extracted_at": st.just(T),
 }

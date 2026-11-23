@@ -11,12 +11,7 @@ import warnings
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
-from typing import Any
-
-from openpyxl import load_workbook
-from openpyxl.cell.cell import MergedCell
-from openpyxl.worksheet.formula import ArrayFormula
-from openpyxl.worksheet.worksheet import Worksheet
+from typing import TYPE_CHECKING, Any
 
 from app.domain.locators import XlsxCell
 from app.domain.model import number_from_cell_value
@@ -24,6 +19,9 @@ from app.ingest.errors import IntakeRejected, Limits
 from app.ingest.fragments import CellFragment, SheetFragment, ValueType
 from app.ingest.ooxml import inspect_xlsx_package
 from app.ingest.sandbox import run_sandboxed
+
+if TYPE_CHECKING:  # openpyxl (and Pillow behind it) load only in the sandbox child
+    from openpyxl.worksheet.worksheet import Worksheet
 
 EXTRACTOR = "xlsx_cells@1"
 
@@ -51,7 +49,7 @@ def _render(v: object, data_type: str) -> tuple[Any, ValueType, str]:
     raise IntakeRejected("unsupported_cell")  # timedelta and anything else
 
 
-def _hidden_columns(ws: Worksheet) -> set[int]:
+def _hidden_columns(ws: "Worksheet") -> set[int]:
     out: set[int] = set()
     for d in ws.column_dimensions.values():
         if d.hidden and d.min is not None and d.max is not None:
@@ -61,6 +59,10 @@ def _hidden_columns(ws: Worksheet) -> set[int]:
 
 def extract_plain(data: bytes, limits: Limits) -> dict[str, Any]:
     """Runs in the sandboxed child: openpyxl in, plain JSON-able data out (no models)."""
+    from openpyxl import load_workbook  # noqa: PLC0415
+    from openpyxl.cell.cell import MergedCell  # noqa: PLC0415
+    from openpyxl.worksheet.formula import ArrayFormula  # noqa: PLC0415
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         # openpyxl exposes either formulas or cached values, never both: load twice

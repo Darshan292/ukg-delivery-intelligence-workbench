@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 """The milestone's hostile-input list, executable: every case is refused by ingest() with a fixed
-reason, no content in the message, and exactly one WARNING line. PDF cases arrive with PR B."""
+reason, no content in the message, and exactly one WARNING line."""
 
 import logging
 import zipfile
@@ -18,6 +18,7 @@ from app.domain.records import Records
 from app.ingest.errors import IntakeRejected, Limits
 from app.ingest.intake import ingest
 from tests.ingest.hostile import MARKER, rewrite_zip, workbook_bytes
+from tests.ingest.pdfs import make_pdf
 
 NOW = datetime(2026, 11, 22, 9, 0, tzinfo=UTC)
 M = MARKER.encode()
@@ -35,6 +36,10 @@ def _wb() -> bytes:
 def _ct() -> bytes:
     with zipfile.ZipFile(BytesIO(_wb())) as zf:
         return zf.read("[Content_Types].xml")
+
+
+def _pdf() -> bytes:
+    return make_pdf([[(72, 700, "OT-1 hello")]])
 
 
 LAUGHS = (
@@ -102,6 +107,9 @@ CASES: list[tuple[str, Callable[[], bytes], str, str]] = [
         "unsupported_part",
     ),
     ("extension_spoof", lambda: b"%PDF-1.4 " + M, "xlsx", "type_mismatch"),
+    ("pdf_truncated", lambda: _pdf()[: len(_pdf()) // 2], "pdf", "pdf_malformed"),
+    ("pdf_garbage", lambda: b"%PDF-1.4\n" + M * 20, "pdf", "pdf_malformed"),
+    ("pdf_too_many_pages", lambda: make_pdf([[], [], []]), "pdf", "pdf_too_many_pages"),
     ("xlsx_declared_pdf", _wb, "pdf", "type_mismatch"),
     ("oversized", lambda: b"PK\x03\x04" + b"0" * 4096, "xlsx", "too_large"),
     ("truncated_xlsx", lambda: _wb()[: len(_wb()) // 2], "xlsx", "archive_malformed"),
@@ -127,7 +135,8 @@ def test_hostile_file_rejected(
             ),
         ),
     )
-    kw: dict[str, Any] = {"limits": Limits(max_file_bytes=2048)} if name == "oversized" else {}
+    lim = {"oversized": Limits(max_file_bytes=2048), "pdf_too_many_pages": Limits(pdf_max_pages=2)}
+    kw: dict[str, Any] = {"limits": lim[name]} if name in lim else {}
     with caplog.at_level(logging.DEBUG), pytest.raises(IntakeRejected) as ei:
         ingest(
             records,

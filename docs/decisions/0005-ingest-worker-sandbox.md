@@ -49,3 +49,22 @@ can differ run to run near the limit.
   loop.
 - Linux only (`resource`); CI is Ubuntu.
 - The limits are placeholders set by the team, not measured (Q7).
+
+## PDF (PR B)
+
+`app/ingest/pdf.py` reuses `run_sandboxed` with `pdf_total_seconds` and `pdf_memory_bytes` in
+place of the worker values; pdfplumber is imported only inside the child. A wall-clock timeout
+or an oversized reply is `resource_limit`; the in-child per-page budget is `pdf_timeout`.
+Encrypted PDFs (even with an empty user password) are refused with `pdf_encrypted`.
+A Flate decompression bomb is not detected as such: it ends in a failed allocation under
+`RLIMIT_AS` and surfaces as `pdf_malformed` (or `resource_limit`), bounded by the memory limit.
+pypdfium2 has no libc marker that uv can exclude, so musl wheels are not blocked at resolution:
+only glibc, macOS and Windows are supported (CI is Ubuntu; there is no backend Docker image), and
+`test_pypdfium2_wheel_is_not_musl` checks the installed wheel tag.
+
+The parent's pre-load scanner (`app/ingest/ooxml.py`) imports openpyxl's own workbook-part
+finder, `Manifest` and `range_boundaries` on the first xlsx scan, deliberately, so that it
+resolves the workbook part exactly as openpyxl will (blocker B1). So openpyxl and, through it,
+the PIL module are imported in the parent. No image or workbook is decoded there: openpyxl loads
+workbooks only in the sandbox child. Replacing those helpers with our own code would reintroduce
+the scanner/openpyxl differential. Importing `app.ingest.*` alone loads none of them.
