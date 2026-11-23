@@ -20,7 +20,7 @@ Status: **approved by the owner, 2026-11-22 (4).** Records the owner's answers t
 
 - The oracle author applies R1-3 to R1-7 when deriving expected results and building the mutated fixtures.
 - Slice 3 implements R1-8 and R1-9; Slice 5 storage follows R1-10.
-- `NOTICE` gains the FreeType and IJG notices when pypdfium2 is added; the dependency is pinned to non-musl wheels.
+- `NOTICE` gains the FreeType and IJG notices when pypdfium2 is added; no musl (Alpine) wheels are used: CI and Docker are glibc-based.
 - Decision 0006 status is updated to accepted for Milestone 1.
 
 ## Tests
