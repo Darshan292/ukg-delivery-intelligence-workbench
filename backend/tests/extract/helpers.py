@@ -103,7 +103,7 @@ def put(wb: Workbook, name: str, rows: Sequence[Sequence[Any]]) -> Worksheet:
 
 
 def run(
-    build: Callable[[Workbook], None],
+    build: Callable[[Workbook], object],
     *,
     records: Records | None = None,
     snapshot_id: int | None = 1,
@@ -111,7 +111,7 @@ def run(
 ) -> tuple[Ingested, Extracted]:
     ing = ingest(
         records or base_records(),
-        workbook_bytes(build),
+        workbook_bytes(lambda wb: (build(wb), None)[1]),
         declared_kind="xlsx",
         product_profile="synthetic",
         title="t",

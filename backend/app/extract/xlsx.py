@@ -165,6 +165,9 @@ class _Run:
 
     # -- sheets
     def scan(self, name: str, cells: dict[tuple[int, int], _Cell]) -> None:
+        if header_norm(name) in {header_norm(n) for n in self.cat.notes_sheets}:
+            self.structural.update(c.id for c in cells.values())  # labels, not data
+            return
         by_row: dict[int, list[_Cell]] = {}
         for c in cells.values():
             by_row.setdefault(c.row, []).append(c)
@@ -174,6 +177,9 @@ class _Run:
                 break
             heads = {header_norm(str(c.value)) for c in by_row[r] if c.kind == "string"}
             hits = [s for s in self.cat.sheets if s.signature <= heads]
+            if len(hits) > 1:
+                self.bound("ambiguous_sheet", cells.values())
+                return
             if hits:
                 found = (r, hits[0])
                 break
@@ -183,12 +189,17 @@ class _Run:
         hrow, spec = found
         roles = _roles(spec)
         colmap: dict[int, str] = {}
+        stray: dict[int, list[int]] = {}  # unrecognised column -> its header and data cells
         for c in by_row[hrow]:
             role = roles.get(header_norm(str(c.value))) if c.kind == "string" else None
             if role is not None:
                 for col in range(c.span[0], c.span[1] + 1):
                     colmap[col] = role
-            self.structural.add(c.id)
+            if role is not None or c.kind == "blank":
+                self.structural.add(c.id)
+            else:
+                for col in range(c.span[0], c.span[1] + 1):
+                    stray.setdefault(col, []).append(c.id)
         for r in sorted(by_row):
             if r <= hrow:
                 self.structural.update(c.id for c in by_row[r])
@@ -199,8 +210,12 @@ class _Run:
                     self.structural.add(c.id)
                 elif c.col in colmap:
                     kept[c.col] = c
+                else:
+                    stray.setdefault(c.col, []).append(c.id)
             if kept:
                 self.rows.append(_Row(spec, kept, colmap))
+        for ids in stray.values():
+            self.bound("unrecognised_column", ids)
 
 
 def _roles(spec: SheetSpec) -> dict[str, str]:
