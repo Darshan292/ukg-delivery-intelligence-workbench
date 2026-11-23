@@ -57,9 +57,14 @@ def with_x_limit(wb: Workbook) -> None:
 
 
 def pdf_run(
-    pages: list[list[Word]], *, build: Any = config, rules: PdfRuleCatalogue = RULES
+    pages: list[list[Word]],
+    *,
+    build: Any = config,
+    rules: PdfRuleCatalogue = RULES,
+    config_snapshot: int | None = 1,
+    pdf_snapshot: int | None = None,
 ) -> tuple[Ingested, Extracted]:
-    _, x = run(build)
+    _, x = run(build, snapshot_id=config_snapshot)
     ing = ingest(
         x.records,
         make_pdf(pages),
@@ -67,7 +72,7 @@ def pdf_run(
         product_profile="synthetic",
         title="design note",
         uploaded_by=1,
-        snapshot_id=None,
+        snapshot_id=pdf_snapshot,
         now=NOW,
     )
     return ing, extract_pdf_rules(ing.records, ing.parsed, rules, now=NOW)

@@ -58,3 +58,24 @@ def test_bool_never_number() -> None:
     _, x = pdf_run([line("C-1", "L-4", "1")])  # label is True; Decimal(1) == True in Python
     assert pdf_edges(x) == set()
     assert not x.records.extraction_boundaries
+
+
+def test_value_match_scoped_pdf_sees_only_its_snapshot() -> None:
+    words = [line("C-1", "L-2", "37.50")]
+    _, other = pdf_run(words, config_snapshot=2, pdf_snapshot=1)
+    assert pdf_edges(other) == set()  # the attribute lives in snapshot 2
+    _, same = pdf_run(words, config_snapshot=2, pdf_snapshot=2)
+    assert len(pdf_edges(same)) == 1
+    assert same.records.claims[-1].scope_snapshot_id == 2
+
+
+def test_value_match_unscoped_pdf_sees_any_version() -> None:
+    _, x = pdf_run([line("C-1", "L-2", "37.50")], config_snapshot=2, pdf_snapshot=None)
+    assert len(pdf_edges(x)) == 1
+
+
+def test_line_tolerance_is_measured_from_the_first_word_of_the_line() -> None:
+    # tops drift 1.5 points per word: each step is inside the 2.0 tolerance, the whole is not
+    drift = [(72 + 60 * i, 700 - 1.5 * i, w) for i, w in enumerate(["B-1", "a", "b", "L-1"])]
+    _, x = pdf_run([drift])
+    assert pdf_edges(x) == set()

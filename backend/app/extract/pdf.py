@@ -152,6 +152,8 @@ def extract_pdf_rules(
 
     values: dict[int, dict[str, set[Decimal]]] = {}  # entity id -> attribute name -> numbers
     for ev in records.entity_versions:
+        if snapshot is not None and ev.snapshot_id != snapshot:
+            continue  # a scoped PDF is compared with its own snapshot only (team decision)
         for a in ev.attributes:
             if isinstance(a.value, Decimal):
                 values.setdefault(ev.entity_id, {}).setdefault(a.name, set()).add(a.value)
