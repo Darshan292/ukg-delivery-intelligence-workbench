@@ -206,11 +206,66 @@ CASES["catalogue_pairs"] = lambda i: _case(
 )  # fmt: skip
 
 
+VALID: dict[str, Callable[[Ids], dict[str, Any]]] = {
+    "actor": lambda i: {"i": 500, "t": "a", "roles": ["a"]},
+    "snapshot": lambda i: {"i": 500, "e": "a", "t": "a"},
+    "document": lambda i: {"i": 500, "t": "a"},
+    "document_version": lambda i: {"i": 500, "by": i.reviewer},
+    "entity": lambda i: {"i": 500, "t": "a", "k": "a"},
+    "entity_version": lambda i: {"i": 500, "dv": i.design_dv, "loc": [i.design_locator]},
+    "catalogue_entity_type": lambda i: {"n": "a", "d": ["a"]},
+    "catalogue_relationship_type": lambda i: {"n": "a"},
+    "relationship": lambda i: {"i": 500, "q": "a"},
+    "evidence_locator": lambda i: {"i": 500, "dv": i.design_dv, "sn": "a", "ex": "a@1"},
+    "claim": lambda i: {
+        "i": 500, "rel": i.scoped_rel, "m": "a@1", "mi": "a", "pv": "a", "s": i.s1,
+        "loc": [i.export_locator],
+    },
+    "review_event_id": lambda i: {
+        "i": 500, "rel": i.scoped_rel, "s": i.s1, "t": "a", "a": i.reviewer,
+    },
+    "unresolved_reference": lambda i: {"i": 500, "raw": "a", "loc": i.design_locator},
+    "locator_json": lambda i: {
+        "dv": i.design_dv, "kind": "xlsx_cell", "loc": '{"sheet": "S", "cell": "B9"}',
+    },
+    "attributes_json": lambda i: {
+        "dv": i.design_dv,
+        "attrs": f'[{{"name": "q", "value": "x", "locator_id": {i.design_locator}}}]',
+        "ids": [i.design_locator],
+    },
+    "catalogue_pairs": lambda i: {"p": '[["a", "b"]]'},
+}  # fmt: skip
+
+
+def _insert_and_load(store: Engine, sql: str, params: dict[str, Any]) -> bool:
+    """Insert one row and load it; False if the database refused it. Always rolls back."""
+    with store.connect() as c:
+        try:
+            c.execute(text(sql), params)
+        except DBAPIError:
+            c.rollback()
+            return False
+        try:
+            load(c)  # a stored row the domain rejects would brick this for good
+        finally:
+            c.rollback()
+        return True
+
+
+def test_every_case_has_a_known_valid_row() -> None:
+    assert VALID.keys() == CASES.keys()
+
+
+@pytest.mark.parametrize("name", CASES)
+def test_known_valid_row_is_accepted_and_loads(store: Engine, world_ids: Ids, name: str) -> None:
+    """Deterministic positive control: the property below cannot silently run on refused rows."""
+    sql, _ = CASES[name](world_ids)
+    assert _insert_and_load(store, sql, VALID[name](world_ids))
+
+
 @pytest.mark.parametrize("name", CASES)
 def test_every_accepted_row_loads(store: Engine, world_ids: Ids, name: str) -> None:
     sql, strategies = CASES[name](world_ids)
-
-    accepted = 0
 
     @settings(
         max_examples=100,
@@ -222,21 +277,9 @@ def test_every_accepted_row_loads(store: Engine, world_ids: Ids, name: str) -> N
         if "kl" in params:
             kind, loc = params["kl"]
             params = {**{k: v for k, v in params.items() if k != "kl"}, "kind": kind, "loc": loc}
-        with store.connect() as c:
-            try:
-                c.execute(text(sql), params)
-            except DBAPIError:
-                c.rollback()
-                return  # refused by the database: nothing can be stored
-            nonlocal accepted
-            accepted += 1
-            try:
-                load(c)  # a stored row the domain rejects would brick this for good
-            finally:
-                c.rollback()
+        _insert_and_load(store, sql, params)
 
     check()
-    assert accepted > 0  # positive control: the case inserts valid rows at all
 
 
 def _loc(store: Engine, ids: Ids, kind: str, payload: str) -> None:
