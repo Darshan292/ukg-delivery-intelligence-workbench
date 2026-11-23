@@ -14,6 +14,7 @@ dependencies = [
     "pg8000",
     "openpyxl>=3.1.5,<3.2",
     "defusedxml>=0.7.1,<0.8",
+    "pdfplumber>=0.11.11,<0.12",
 ]
 
 [dependency-groups]
