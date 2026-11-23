@@ -291,12 +291,13 @@ def _finish(run: _Run) -> Extracted:
         ents.append(
             _Ent(row.spec, row, key, profile, kc, triple=(profile, row.spec.entity_type, key))
         )
+    ents, dups = _split_duplicates(run, ents)
     existing = {e.key: e for e in r.entities}
     new_ents = sorted({e.triple for e in ents} - existing.keys())
     ent_id = {t: existing[t].id for t in existing}
     for i, t in enumerate(new_ents, _next(r.entities)):
         ent_id[t] = i
-    resolver = _Resolver(run, ents)
+    resolver = _Resolver(run, ents, dups)
     versions: list[EntityVersion] = []
     for i, e in enumerate(sorted(ents, key=lambda e: e.triple), _next(r.entity_versions)):
         attrs: list[Attribute] = []
@@ -401,11 +402,24 @@ def _finish(run: _Run) -> Extracted:
     )
 
 
+def _split_duplicates(run: _Run, ents: list[_Ent]) -> tuple[list[_Ent], set[tuple[str, str]]]:
+    """A key on two or more rows is defined but not versioned: a boundary per row."""
+    count: dict[tuple[str, str], int] = {}
+    for e in ents:
+        count[e.triple[1:]] = count.get(e.triple[1:], 0) + 1
+    dups = {k for k, n in count.items() if n > 1}
+    for e in ents:
+        if e.triple[1:] in dups:
+            run.bound("duplicate_key", e.row.cells.values())
+    return [e for e in ents if e.triple[1:] not in dups], dups
+
+
 class _Resolver:
     """Reference resolution (plan rules 1 to 9); collects edges and unresolved references."""
 
-    def __init__(self, run: _Run, ents: list[_Ent]) -> None:
+    def __init__(self, run: _Run, ents: list[_Ent], dups: set[tuple[str, str]]) -> None:
         self.run = run
+        self.dups = dups
         self.profile = run.parsed.product_profile
         self.doc: dict[tuple[str, str], _Ent] = {(e.triple[1], e.triple[2]): e for e in ents}
         self.types_of_key: dict[str, set[str]] = {}
@@ -443,11 +457,17 @@ class _Resolver:
             return
         raw = str(c.value)
         k = normalise_key_v1(raw)
+        if (rc.target_type, k) in self.dups:
+            self.run.bound("ambiguous_target", [c])
+            return
         tgt = self.target(rc.target_type, k)
         if tgt is None:
             other = self.types_of_key.get(k, set()) - {rc.target_type}
             reason: UnresolvedReason = "uncatalogued_type" if other else "missing_target"
             self.unresolved.append((e.triple, raw, c.id, reason))
+            return
+        if tgt == e.triple:  # the model rejects self loops
+            self.run.bound("self_reference", [c])
             return
         key: _EdgeKey = (rc.relationship_type, e.triple, tgt, None)
         self.edges.setdefault(key, []).append(tuple(sorted((e.key_cell.id, c.id))))
