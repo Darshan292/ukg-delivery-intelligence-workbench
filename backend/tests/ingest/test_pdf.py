@@ -16,7 +16,7 @@ from app.domain.records import Records
 from app.ingest.errors import IntakeRejected, Limits, Reason
 from app.ingest.fragments import PageFragment
 from app.ingest.intake import ingest
-from app.ingest.pdf import parse_pdf
+from app.ingest.pdf import extract_pdf, parse_pdf
 from tests.ingest.hostile import MARKER
 from tests.ingest.pdfs import build_pdf, make_pdf
 
@@ -279,11 +279,32 @@ def test_page_cap_fires_before_any_page_is_extracted() -> None:
     )
 
 
-def test_many_pages_rejected_without_materialising_them() -> None:
-    data = _page_tree(60_000)
-    start = time.monotonic()
-    _rejects(data, "pdf_too_many_pages", Limits(pdf_max_objects=10**6))
-    assert time.monotonic() - start < 3  # building 60k Page objects first takes about 4 s
+def test_many_pages_rejected_without_materialising_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # in-process on purpose: a spy cannot cross the sandbox; no timing is asserted
+    import pdfplumber.page
+    from pdfminer.pdfpage import PDFPage
+
+    built: list[int] = []
+    seen: list[int] = []
+    real_init, real_create = pdfplumber.page.Page.__init__, PDFPage.create_pages
+
+    def spy_init(self: Any, *a: Any, **k: Any) -> None:
+        built.append(1)
+        real_init(self, *a, **k)
+
+    def spy_create(doc: Any) -> Any:
+        for pg in real_create(doc):
+            seen.append(1)
+            yield pg
+
+    monkeypatch.setattr(pdfplumber.page.Page, "__init__", spy_init)
+    monkeypatch.setattr(PDFPage, "create_pages", staticmethod(spy_create))
+    with pytest.raises(IntakeRejected) as ei:
+        extract_pdf(_page_tree(50), Limits(pdf_max_pages=5))
+    assert ei.value.reason == "pdf_too_many_pages"
+    assert built == [] and len(seen) <= 6  # no Page built; at most cap + 1 page objects walked
 
 
 def _cmap_pdf() -> bytes:

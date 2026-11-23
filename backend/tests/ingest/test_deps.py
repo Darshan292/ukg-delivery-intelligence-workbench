@@ -29,9 +29,9 @@ PDF_STACK = ("pdfplumber", "pdfminer", "pypdfium2", "pypdfium2_raw")
 
 
 def test_pdf_stack_not_loaded_by_the_parent() -> None:
-    assert _loaded_after_importing("app.ingest.pdf", (*PDF_STACK, "PIL")) == []
-    # openpyxl (xlsx intake) loads PIL itself when installed, so PIL is only checked above
-    assert _loaded_after_importing("app.ingest.intake", PDF_STACK) == []
+    heavy = (*PDF_STACK, "PIL", "openpyxl")
+    for module in ("app.ingest.pdf", "app.ingest.xlsx", "app.ingest.intake"):
+        assert _loaded_after_importing(module, heavy) == [], module
 
 
 def test_child_does_not_load_imaging_or_rendering_for_an_image_pdf() -> None:
