@@ -63,15 +63,17 @@ Work is driven by milestone gates, not by the calendar: no day-based schedules, 
 - **Gates:** Slice 2b and Slice 6 need the oracle frozen by the owner. Slice 4 needs Slice 3 merged. Slice 7 needs Slice 6 merged **and** the owner's confirmation that 5 practitioner interviews are done. Slice 8 needs Slice 6 merged. Gate G-REAL (any real data) is unchanged.
 - **Reports:** one per merged slice, plus one immediately when all remaining work is blocked. Each is a comment on the pinned GitHub issue "Status reports" and contains: links to the merged commits, the acceptance criteria met, the mutations or failure cases its tests catch, the next slice started, and at most one batched question list with recommendations.
 
-## Delegating by complexity
+## Model routing (binding, owner 2026-11-22 (4))
 
-Give each delegated task to the cheapest agent that can do it reliably, and pass the agent's model when spawning:
+Pass the agent's model when spawning:
 
 | Agent (`.claude/agents/`) | Model | Use for |
 |---|---|---|
-| `scout` | haiku | Read-only lookups, file/symbol search, summaries, running given checks, reading docs |
-| `implementer` | sonnet | One well-specified plan task with tests, spec-compliance review, routine refactors |
-| `architect` | opus | IR/provenance/graph data model, LLM boundary, impact traversal design, security review, milestone review |
+| `scout` | haiku | Lookups, version and SHA checks, licence and name scans, reading CI logs, status summaries, formatting |
+| `implementer` | sonnet | Implementation from an approved spec, tests, bug fixes, small refactors, migrations, PR descriptions |
+| `architect` | opus | Architecture and decision records, rule semantics, traversal (Slice 6), security review of each slice, independent review of Sonnet's work |
+
+The lead session only plans, routes, verifies and merges. It does not write implementation code itself. Each status report lists which tier did each piece of work.
 
 Escalate when a lower tier reports ambiguity; never let a lower tier make an architectural decision.
 
