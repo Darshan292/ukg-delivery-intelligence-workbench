@@ -290,6 +290,9 @@ def _finish(run: _Run) -> Extracted:
         if not kcells:
             run.bound("missing_key", whole)
             continue
+        if len(kcells) > 1:  # a merged key header over two filled cells
+            run.bound("duplicate_value", whole)
+            continue
         kc = kcells[0]
         if kc.kind != "string":
             run.bound(_bad_reason(kc.kind), whole)
@@ -316,9 +319,15 @@ def _finish(run: _Run) -> Extracted:
             ids.append(e.profile_cell.id)
         if e.profile == "unknown":  # decision 0007 R1-3: the entity states itself once
             run.bound("unknown_profile_entity", ids)
+        per_role: dict[str, list[_Cell]] = {}
+        for col, c in sorted(e.row.cells.items()):
+            per_role.setdefault(e.row.roles[col], []).append(c)
         for col, c in sorted(e.row.cells.items()):
             role = e.row.roles[col]
             if role.startswith("attr:"):
+                if len(per_role[role]) > 1:  # one attribute, two values: no way to choose
+                    run.bound("duplicate_value", per_role[role])
+                    continue
                 if c.kind in _BAD:  # the attribute is omitted, never stored as None
                     run.bound(_bad_reason(c.kind), [c])
                     continue
