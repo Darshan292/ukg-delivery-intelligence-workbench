@@ -7,13 +7,17 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from app.domain.model import Catalogue
 from app.extract.catalogue import (
     AttributeColumn,
+    CatalogueMismatch,
     ReferenceColumn,
     SheetCatalogue,
     SheetSpec,
+    check_against,
     header_norm,
 )
+from tests.extract.helpers import DOMAIN, SHEETS
 
 
 def cat(*sheets: SheetSpec, profile: str = "synthetic") -> SheetCatalogue:
@@ -82,3 +86,60 @@ def test_overlapping_signature_rejected() -> None:
 def test_unknown_profile_rejected() -> None:
     with pytest.raises(ValidationError):
         cat(spec(), profile="unknown")
+
+
+# --- check_against ---
+
+
+def test_fixture_catalogue_fits() -> None:
+    check_against(SHEETS, DOMAIN)
+
+
+def _sheets(**edit: Any) -> SheetCatalogue:
+    return SHEETS.model_copy(update=edit)
+
+
+def _replace_spec(which: str, **kw: Any) -> SheetCatalogue:
+    new = tuple(s.model_copy(update=kw) if s.entity_type == which else s for s in SHEETS.sheets)
+    return _sheets(sheets=new)
+
+
+def _ref0(which: str, **kw: Any) -> SheetCatalogue:
+    s = next(s for s in SHEETS.sheets if s.entity_type == which)
+    refs = (s.references[0].model_copy(update=kw), *s.references[1:])
+    return _replace_spec(which, references=refs)
+
+
+def _check_ref(**kw: Any) -> SheetCatalogue:
+    s = next(s for s in SHEETS.sheets if s.entity_type == "check")
+    refs = tuple(
+        r.model_copy(update=kw) if r.relationship_type == "asserts_value" else r
+        for r in s.references
+    )
+    return _replace_spec("check", references=refs)
+
+
+BAD: dict[str, SheetCatalogue] = {
+    "unknown_entity_type": _replace_spec("limit", entity_type="gadget"),
+    "unknown_relationship_type": _ref0("bundle", relationship_type="gizmo"),
+    "unknown_target_type": _ref0("bundle", target_type="gadget"),
+    "qualifier_on_plain_type": _ref0("bundle", qualifier_header="extra"),
+    "missing_qualifier_header": _check_ref(qualifier_header=None),
+    "display_only_must_be_declared": _replace_spec(
+        "limit", attributes=(AttributeColumn(header="hours", name="hours"),)
+    ),
+    "profile_mismatch": _sheets(product_profile="ukg_pro_wfm"),
+}
+
+
+@pytest.mark.parametrize("case", sorted(BAD))
+def test_mismatch_raises_without_header_text(case: str) -> None:
+    with pytest.raises(CatalogueMismatch) as e:
+        check_against(BAD[case], DOMAIN)
+    msg = str(e.value)
+    for h in ("limit_id", "hours", "label", "asserts_attribute", "gadget", "gizmo", "extra"):
+        assert h not in msg
+
+
+def test_domain_is_a_catalogue() -> None:
+    assert isinstance(DOMAIN, Catalogue)

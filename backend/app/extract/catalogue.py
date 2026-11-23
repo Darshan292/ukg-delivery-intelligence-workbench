@@ -12,13 +12,13 @@ from typing import Annotated, Final, Self
 
 from pydantic import Field, model_validator
 
-from app.domain.model import NonBlank, ProductProfile, Record, Versioned
+from app.domain.model import Catalogue, NonBlank, ProductProfile, Record, Versioned
 
 RESERVED_HEADERS: Final = frozenset({"product_profile"})  # never attributes, in every sheet
 
 
 def header_norm(s: str) -> str:
-    """Header recognition only (never keys): strip, casefold, runs of non-word chars and _ to one _."""
+    """Header recognition only, never keys: strip, casefold, runs of non-word chars to one _."""
     return re.sub(r"[\W_]+", "_", s.strip().casefold()).strip("_")
 
 
@@ -84,3 +84,24 @@ class SheetCatalogue(Record):
                 if a is not b and a.signature <= set(b.declared):
                     raise ValueError("sheet catalogue: overlapping signatures")
         return self
+
+
+def check_against(sheets: SheetCatalogue, domain: Catalogue) -> None:
+    """Fail fast where the sheet catalogue and the domain catalogue disagree.
+
+    The message is a fixed string: it never carries a header or any other input.
+    """
+    if sheets.product_profile != domain.product_profile:
+        raise CatalogueMismatch("sheet catalogue: profile differs from the domain catalogue")
+    entity = {t.name: t for t in domain.entity_types}
+    rel = {t.name: t for t in domain.relationship_types}
+    for s in sheets.sheets:
+        if s.entity_type not in entity:
+            raise CatalogueMismatch("sheet catalogue: unknown entity type")
+        if not set(entity[s.entity_type].display_only_attributes) <= {a.name for a in s.attributes}:
+            raise CatalogueMismatch("sheet catalogue: display-only attribute not declared")
+        for r in s.references:
+            if r.target_type not in entity or r.relationship_type not in rel:
+                raise CatalogueMismatch("sheet catalogue: unknown target or relationship type")
+            if (r.qualifier_header is not None) != rel[r.relationship_type].qualifier_required:
+                raise CatalogueMismatch("sheet catalogue: qualifier column does not fit the type")
