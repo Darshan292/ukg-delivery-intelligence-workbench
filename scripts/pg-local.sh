@@ -45,8 +45,11 @@ start() {
     as "$BIN/initdb" -D "$PGDATA" -U postgres --auth-local=trust --auth-host=scram-sha-256 --encoding=UTF8 >/dev/null
   fi
   if ! running; then
+    # autovacuum=off: throwaway test databases need none, and a worker attached to one makes the
+    # fixture's DROP DATABASE ... WITH (FORCE) fail at random, because tracer is not a superuser
+    # and cannot terminate it ("permission denied to terminate process"). Applies on restart.
     as "$BIN/pg_ctl" -D "$PGDATA" -l "$LOG" -w \
-      -o "-p $PORT -c listen_addresses=127.0.0.1 -c unix_socket_directories=$DIR -c unix_socket_permissions=0700" start >/dev/null
+      -o "-p $PORT -c listen_addresses=127.0.0.1 -c unix_socket_directories=$DIR -c unix_socket_permissions=0700 -c autovacuum=off" start >/dev/null
   fi
   psql_() { as "$BIN/psql" -h "$DIR" -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -qtA "$@"; }
   if [ "$(psql_ -d postgres -c "SELECT 1 FROM pg_roles WHERE rolname='tracer'")" != 1 ]; then
