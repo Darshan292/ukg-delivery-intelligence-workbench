@@ -235,7 +235,7 @@ class _Run:
 
 
 def _roles(spec: SheetSpec) -> dict[str, str]:
-    out = {header_norm(spec.key_header): "key"}
+    out = {header_norm(spec.key_header): "key", "product_profile": "profile"}
     for a in spec.attributes:
         out[header_norm(a.header)] = f"attr:{a.name}"
     for rc in spec.references:
@@ -295,8 +295,11 @@ def _finish(run: _Run) -> Extracted:
             run.bound(_bad_reason(kc.kind), whole)
             continue
         key = normalise_key_v1(str(kc.value))
+        ent_profile, pc, ok = _row_profile(run, row, profile)
+        if not ok:
+            continue
         ents.append(
-            _Ent(row.spec, row, key, profile, kc, triple=(profile, row.spec.entity_type, key))
+            _Ent(row.spec, row, key, ent_profile, kc, pc, (ent_profile, row.spec.entity_type, key))
         )
     ents, dups = _split_duplicates(run, ents)
     existing = {e.key: e for e in r.entities}
@@ -309,6 +312,10 @@ def _finish(run: _Run) -> Extracted:
     for i, e in enumerate(sorted(ents, key=lambda e: e.triple), _next(r.entity_versions)):
         attrs: list[Attribute] = []
         ids = [e.key_cell.id]
+        if e.profile_cell is not None:
+            ids.append(e.profile_cell.id)
+        if e.profile == "unknown":  # decision 0007 R1-3: the entity states itself once
+            run.bound("unknown_profile_entity", ids)
         for col, c in sorted(e.row.cells.items()):
             role = e.row.roles[col]
             if role.startswith("attr:"):
@@ -410,6 +417,32 @@ def _finish(run: _Run) -> Extracted:
     )
 
 
+def _row_profile(
+    run: _Run, row: _Row, doc_profile: ProductProfile
+) -> tuple[ProductProfile, _Cell | None, bool]:
+    """The reserved product_profile cell: absent or blank is the document's profile (decision
+    0003 Q7, team default); `unknown` is explicit content; anything else is stated, not guessed."""
+    whole = row.cells.values()
+    cells = [c for col, c in sorted(row.cells.items()) if row.roles[col] == "profile"]
+    if not cells:
+        return doc_profile, None, True
+    if len(cells) > 1:
+        run.bound("duplicate_value", whole)
+        return doc_profile, None, False
+    pc = cells[0]
+    if pc.kind != "string":
+        reason = _bad_reason(pc.kind) if pc.kind in _BAD else "invalid_profile"
+        run.bound(reason, whole)
+        return doc_profile, None, False
+    v = str(pc.value).strip()
+    if v == "unknown":
+        return "unknown", pc, True
+    if v == doc_profile:
+        return doc_profile, pc, True
+    run.bound("invalid_profile", whole)
+    return doc_profile, None, False
+
+
 def _split_duplicates(run: _Run, ents: list[_Ent]) -> tuple[list[_Ent], set[tuple[str, str]]]:
     """A key on two or more rows is defined but not versioned: a boundary per row."""
     count: dict[tuple[str, str], int] = {}
@@ -477,6 +510,10 @@ class _Resolver:
             other = self.types_of_key.get(k, set()) - {rc.target_type}
             reason: UnresolvedReason = "uncatalogued_type" if other else "missing_target"
             self.unresolved.append((e.triple, raw, c.id, reason))
+            return
+        if e.profile == "unknown" and tgt[0] == "unknown":
+            # the Records invariant rejects an unknown-to-unknown relationship: state it instead
+            self.unresolved.append((e.triple, raw, c.id, "unknown_profile"))
             return
         if tgt == e.triple:  # the model rejects self loops
             self.run.bound("self_reference", [c])
