@@ -584,7 +584,7 @@ class _Resolver:
             self.cited.update(x.id for x in blanks)
             return False
         if len(cells) > 1:
-            self.run.bound("duplicate_value", cells)
+            self.run.bound("duplicate_value", [c, *cells])
             self.cited.update(x.id for x in cells)
             return False
         if cells[0].kind != "string":

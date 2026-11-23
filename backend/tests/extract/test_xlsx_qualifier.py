@@ -50,3 +50,25 @@ def test_qualifier_of_unresolved_reference_is_accounted() -> None:
 def test_orphan_qualifier_is_stated() -> None:
     _, x = run(build_with(["C-1", 40, None, "hours"]))
     assert bounds(x) == {("unsupported_value", ("Checks!D2",))}
+
+
+def test_two_qualifier_cells_duplicate_value() -> None:
+    def two_columns(wb: Workbook) -> None:
+        put(wb, "Limits", [["limit_id", "hours"], ["L-1", 40]])
+        put(
+            wb, "Checks", [[*CHECK_HEAD, "asserts_attribute"], ["C-1", 40, "L-1", "hours", "label"]]
+        )
+
+    _, x = run(two_columns)
+    assert bounds(x) == {("duplicate_value", ("Checks!C2", "Checks!D2", "Checks!E2"))}
+    assert not edges(x)
+
+
+def test_merged_qualifier_header_two_values() -> None:
+    def merged(wb: Workbook) -> None:
+        put(wb, "Limits", [["limit_id", "hours"], ["L-1", 40]])
+        ws = put(wb, "Checks", [CHECK_HEAD, ["C-1", 40, "L-1", "hours", "label"]])
+        ws.merge_cells("D1:E1")
+
+    _, x = run(merged)
+    assert bounds(x) == {("duplicate_value", ("Checks!C2", "Checks!D2", "Checks!E2"))}

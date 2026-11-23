@@ -23,31 +23,44 @@ CELLS: list[Any] = [
 ]  # fmt: skip
 
 
+Grid = tuple[list[list[Any]], tuple[int, int] | None, int | None]
+
+
 @st.composite
-def grids(draw: st.DrawFn) -> tuple[list[list[Any]], bool, int | None]:
-    ncols = draw(st.integers(1, 5))
-    keys = [s.key_header for s in SHEETS.sheets]
-    header = [draw(st.sampled_from(keys))] + [
-        draw(st.sampled_from(HEADERS)) for _ in range(ncols - 1)
-    ]
+def grids(draw: st.DrawFn) -> Grid:
+    """Row 1 is either a random mix of headers or check-shaped, with one or two qualifier
+    columns (the shapes that need a reference, a qualifier and duplicates to line up)."""
+    if draw(st.booleans()):
+        header: list[Any] = ["check_id", "expected", "asserts", "asserts_attribute"]
+        header += ["asserts_attribute"] * draw(st.integers(0, 1))
+        ncols = len(header)
+    else:
+        ncols = draw(st.integers(1, 5))
+        keys = [s.key_header for s in SHEETS.sheets]
+        header = [draw(st.sampled_from(keys))] + [
+            draw(st.sampled_from(HEADERS)) for _ in range(ncols - 1)
+        ]
     rows = [
         [draw(st.sampled_from(CELLS)) for _ in range(ncols)] for _ in range(draw(st.integers(1, 5)))
     ]
-    merge = ncols >= 3 and draw(st.booleans())
+    merge = None
+    if ncols >= 2 and draw(st.booleans()):
+        first = draw(st.integers(1, ncols - 1))
+        merge = (first, first + 1)  # any two adjacent header cells, 1-based columns
     hidden = draw(st.one_of(st.none(), st.integers(2, 7)))
     return [header, *rows], merge, hidden
 
 
-@settings(max_examples=20, deadline=None)  # each example starts the intake sandbox worker
+@settings(max_examples=60, deadline=None)  # each example starts the intake sandbox worker
 @given(g=grids())
-def test_never_crashes_never_drops(g: tuple[list[list[Any]], bool, int | None]) -> None:
+def test_never_crashes_never_drops(g: Grid) -> None:
     rows, merge, hidden = g
 
     def build(wb: Workbook) -> None:
         put(wb, "Limits", [["limit_id", "hours"], ["L-1", 40], ["L-2", 41]])
         ws = put(wb, "Drawn", rows)
         if merge:
-            ws.merge_cells("B1:C1")
+            ws.merge_cells(start_row=1, start_column=merge[0], end_row=1, end_column=merge[1])
         if hidden is not None:
             ws.row_dimensions[hidden].hidden = True
 
