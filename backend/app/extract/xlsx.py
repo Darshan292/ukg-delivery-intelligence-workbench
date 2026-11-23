@@ -40,6 +40,7 @@ from app.domain.model import (
 from app.domain.records import Records
 from app.extract.catalogue import (
     CatalogueMismatch,
+    ReferenceColumn,
     SheetCatalogue,
     SheetSpec,
     check_against,
@@ -134,6 +135,7 @@ class _Row:
     spec: SheetSpec
     cells: dict[int, _Cell]  # non-blank cells in recognised columns, by column
     roles: dict[int, str]  # column -> role of the sheet
+    blanks: dict[int, _Cell]  # whitespace-only cells in recognised columns (structural)
 
 
 _Triple = tuple[ProductProfile, str, str]
@@ -216,15 +218,18 @@ class _Run:
                 self.structural.update(c.id for c in by_row[r])
                 continue
             kept: dict[int, _Cell] = {}
+            blanks: dict[int, _Cell] = {}
             for c in by_row[r]:
                 if c.kind == "blank":
                     self.structural.add(c.id)
+                    if c.col in colmap:
+                        blanks[c.col] = c
                 elif c.col in colmap:
                     kept[c.col] = c
                 else:
                     stray.setdefault(c.col, []).append(c.id)
             if kept:
-                self.rows.append(_Row(spec, kept, colmap))
+                self.rows.append(_Row(spec, kept, colmap, blanks))
         for ids in stray.values():
             self.bound("unrecognised_column", ids)
 
@@ -235,6 +240,8 @@ def _roles(spec: SheetSpec) -> dict[str, str]:
         out[header_norm(a.header)] = f"attr:{a.name}"
     for rc in spec.references:
         out[header_norm(rc.header)] = f"ref:{header_norm(rc.header)}"
+        if rc.qualifier_header:
+            out[header_norm(rc.qualifier_header)] = f"qual:{header_norm(rc.header)}"
     return out
 
 
@@ -309,6 +316,7 @@ def _finish(run: _Run) -> Extracted:
                 ids.append(c.id)
             elif role.startswith("ref:"):
                 resolver.reference(e, role, c)
+        resolver.leftovers(e)
         versions.append(
             EntityVersion(
                 id=i,
@@ -436,6 +444,7 @@ class _Resolver:
         self.refcols = {
             f"ref:{header_norm(rc.header)}": rc for s in run.cat.sheets for rc in s.references
         }
+        self.cited: set[int] = set()  # qualifier cells already in a claim or a boundary
         self.edges: dict[_EdgeKey, list[tuple[int, ...]]] = {}
         self.unresolved: list[_Unresolved] = []
 
@@ -455,6 +464,9 @@ class _Resolver:
         if c.kind != "string":
             self.run.bound(_bad_reason(c.kind), [c])
             return
+        qual = self.qualifier(e, role, rc, c)
+        if qual is False:
+            return
         raw = str(c.value)
         k = normalise_key_v1(raw)
         if (rc.target_type, k) in self.dups:
@@ -469,5 +481,42 @@ class _Resolver:
         if tgt == e.triple:  # the model rejects self loops
             self.run.bound("self_reference", [c])
             return
-        key: _EdgeKey = (rc.relationship_type, e.triple, tgt, None)
-        self.edges.setdefault(key, []).append(tuple(sorted((e.key_cell.id, c.id))))
+        q, qc = qual if qual is not None else (None, None)
+        key: _EdgeKey = (rc.relationship_type, e.triple, tgt, q)
+        ids = (e.key_cell.id, c.id, *(() if qc is None else (qc.id,)))
+        self.cited.update(() if qc is None else (qc.id,))
+        self.edges.setdefault(key, []).append(tuple(sorted(ids)))
+
+    def qualifier(
+        self, e: _Ent, role: str, rc: ReferenceColumn, c: _Cell
+    ) -> tuple[str, _Cell] | None | Literal[False]:
+        """(qualifier text, its cell), None when the type takes none, False when reported."""
+        if rc.qualifier_header is None:
+            return None
+        qrole = "qual:" + role[4:]
+        cells = [x for col, x in sorted(e.row.cells.items()) if e.row.roles[col] == qrole]
+        if not cells:
+            blanks = [x for col, x in e.row.blanks.items() if e.row.roles[col] == qrole]
+            self.run.bound("missing_qualifier", [c, *blanks])
+            self.cited.update(x.id for x in blanks)
+            return False
+        if len(cells) > 1:
+            self.run.bound("duplicate_value", cells)
+            self.cited.update(x.id for x in cells)
+            return False
+        if cells[0].kind != "string":
+            self.run.bound(_bad_reason(cells[0].kind), [c, cells[0]])
+            self.cited.add(cells[0].id)
+            return False
+        return normalise_key_v1(str(cells[0].value)), cells[0]
+
+    def leftovers(self, e: _Ent) -> None:
+        """A qualifier cell no claim cites: structural if its reference is reported, else stated."""
+        refs = {e.row.roles[col] for col in e.row.cells if e.row.roles[col].startswith("ref:")}
+        for col, x in sorted(e.row.cells.items()):
+            role = e.row.roles[col]
+            if role.startswith("qual:") and x.id not in self.cited:
+                if "ref:" + role[5:] in refs:
+                    self.run.structural.add(x.id)  # its reference is in the not-modelled list
+                else:
+                    self.run.bound("unsupported_value", [x])
