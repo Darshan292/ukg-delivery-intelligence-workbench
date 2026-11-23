@@ -25,10 +25,18 @@ _MAX_COL, _MAX_ROW = 16384, 1_048_576  # Excel sheet limits (vendor fact, not pr
 _CELL = re.compile(r"^([A-Z]{1,3})([1-9][0-9]{0,6})$")
 
 
+def _no_nul(s: str) -> str:
+    if "\x00" in s:
+        raise ValueError("locator: snippet contains NUL")  # Postgres text cannot store it
+    return s
+
+
 class _LocatorBase(Record):
     id: Id
     document_version_id: Id
-    snippet: str  # verbatim value or word; may be "" (an empty cell is evidence too)
+    snippet: Annotated[
+        str, AfterValidator(_no_nul)
+    ]  # verbatim value or word; may be "" (an empty cell is evidence too)
     extractor: Versioned
     extracted_at: AwareDatetime
 

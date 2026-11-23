@@ -13,14 +13,20 @@ from io import BytesIO
 from typing import Any
 from xml.etree.ElementTree import Element  # noqa: S405  (type only; parsing is defusedxml)
 
-from openpyxl.utils.cell import range_boundaries
-
 from app.ingest.errors import IntakeRejected, Limits, Reason
 from app.ingest.safe_xml import parse_xml, scan_xml
 
-# openpyxl's own workbook-part choice is the ground truth for what it will load
-_find_workbook_part: Any = importlib.import_module("openpyxl.reader.excel")._find_workbook_part
-_Manifest: Any = importlib.import_module("openpyxl.packaging.manifest").Manifest
+
+# openpyxl's own workbook-part choice is the ground truth for what it will load; imported on
+# first use so that importing this module loads neither openpyxl nor Pillow
+def _find_workbook_part() -> Any:
+    return importlib.import_module("openpyxl.reader.excel")._find_workbook_part
+
+
+def _manifest() -> Any:
+    return importlib.import_module("openpyxl.packaging.manifest").Manifest
+
+
 _CT = "[Content_Types].xml"
 _XLSX_MAIN = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
 _R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -113,7 +119,7 @@ def _check_content_types(root: Element) -> str:
         raise IntakeRejected("package_inconsistent")
     try:
         # openpyxl's own choice (XLTM, XLTX, XLSM, XLSX order) is the ground truth
-        part: Any = _find_workbook_part(_Manifest.from_tree(root))
+        part: Any = _find_workbook_part()(_manifest().from_tree(root))
     except OSError:
         raise IntakeRejected("unsupported_type") from None
     except Exception:
@@ -205,7 +211,7 @@ class _SheetCaps:
 
     def _bounds(self, ref: str) -> tuple[int, int, int, int]:
         try:
-            c0, r0, c1, r1 = range_boundaries(ref)
+            c0, r0, c1, r1 = importlib.import_module("openpyxl.utils.cell").range_boundaries(ref)
         except (ValueError, TypeError):
             raise IntakeRejected("workbook_malformed") from None
         if c0 is None or r0 is None or c1 is None or r1 is None or c1 < c0 or r1 < r0:
