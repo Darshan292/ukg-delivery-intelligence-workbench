@@ -28,6 +28,7 @@ Reason = Literal[
     "unsupported_cell",
     "pdf_too_many_pages",
     "pdf_too_many_objects",
+    "pdf_too_many_words",
     "pdf_timeout",
     "pdf_resource_limit",
     "pdf_malformed",
@@ -65,6 +66,7 @@ class Limits:
     worker_max_reply_bytes: int = 64 * _MIB  # JSON the child may send; placeholder, not measured
     pdf_max_pages: int = 500
     pdf_max_objects: int = 100_000
+    pdf_max_words: int = 200_000  # placeholder, not measured
     pdf_page_seconds: float = 5
     pdf_total_seconds: float = 30
     pdf_memory_bytes: int = 1024 * _MIB
