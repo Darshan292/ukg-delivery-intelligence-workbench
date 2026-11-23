@@ -74,6 +74,7 @@ from app.extract.xlsx import Extracted, extract_xlsx  # noqa: E402
 from app.ingest.intake import Ingested, ingest  # noqa: E402
 from tests.ingest.hostile import workbook_bytes  # noqa: E402
 
+Build = Callable[[Workbook], object]
 NOW = datetime(2026, 11, 23, tzinfo=UTC)
 
 
@@ -103,7 +104,7 @@ def put(wb: Workbook, name: str, rows: Sequence[Sequence[Any]]) -> Worksheet:
 
 
 def run(
-    build: Callable[[Workbook], object],
+    build: Build,
     *,
     records: Records | None = None,
     snapshot_id: int | None = 1,

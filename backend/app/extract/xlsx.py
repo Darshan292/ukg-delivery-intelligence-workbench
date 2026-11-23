@@ -319,6 +319,9 @@ def _finish(run: _Run) -> Extracted:
         for col, c in sorted(e.row.cells.items()):
             role = e.row.roles[col]
             if role.startswith("attr:"):
+                if c.kind in _BAD:  # the attribute is omitted, never stored as None
+                    run.bound(_bad_reason(c.kind), [c])
+                    continue
                 attrs.append(Attribute(name=role[5:], value=c.value, locator_id=c.id))
                 ids.append(c.id)
             elif role.startswith("ref:"):

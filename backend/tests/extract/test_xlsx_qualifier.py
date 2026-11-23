@@ -7,12 +7,12 @@ from typing import Any
 
 from openpyxl import Workbook
 
-from tests.extract.helpers import attrs, bounds, edges, nm_refs, put, run
+from tests.extract.helpers import Build, attrs, bounds, edges, nm_refs, put, run
 
 CHECK_HEAD = ["check_id", "expected", "asserts", "asserts_attribute"]
 
 
-def build_with(*check_rows: list[Any]) -> Any:
+def build_with(*check_rows: list[Any]) -> Build:
     def build(wb: Workbook) -> None:
         put(wb, "Limits", [["limit_id", "hours"], ["L-1", 40]])
         put(wb, "Checks", [CHECK_HEAD, *check_rows])

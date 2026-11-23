@@ -5,12 +5,12 @@
 from openpyxl import Workbook
 
 from app.extract.catalogue import ReferenceColumn
-from tests.extract.helpers import SHEETS, bounds, edges, entities, nm_refs, put, run
+from tests.extract.helpers import SHEETS, Build, bounds, edges, entities, nm_refs, put, run
 
 LIMITS = [["limit_id", "hours"], ["L-1", 40]]
 
 
-def with_bundles(*rows: list[object]) -> object:
+def with_bundles(*rows: list[object]) -> Build:
     def build(wb: Workbook) -> None:
         put(wb, "Limits", LIMITS)
         put(wb, "Bundles", [["bundle_id", "limit"], *rows])
@@ -19,20 +19,20 @@ def with_bundles(*rows: list[object]) -> object:
 
 
 def test_dangling_reference() -> None:
-    _, x = run(with_bundles(["B-1", "L-9"]))  # type: ignore[arg-type]
+    _, x = run(with_bundles(["B-1", "L-9"]))
     assert nm_refs(x) == {("missing_target", "B-1", "L-9", "Bundles!B2")}
     assert not edges(x)
     assert ("synthetic", "limit", "L-9") not in entities(x)  # no entity is invented
 
 
 def test_alias_spelling() -> None:
-    _, x = run(with_bundles(["B-1", "l-1"]))  # type: ignore[arg-type]
+    _, x = run(with_bundles(["B-1", "l-1"]))
     assert nm_refs(x) == {("missing_target", "B-1", "l-1", "Bundles!B2")}
     assert not edges(x)  # no same_as, no case folding
 
 
 def test_wrong_type_reference() -> None:
-    _, x = run(with_bundles(["B-1", "L-1"], ["B-2", "B-1"]))  # type: ignore[arg-type]
+    _, x = run(with_bundles(["B-1", "L-1"], ["B-2", "B-1"]))
     assert nm_refs(x) == {("uncatalogued_type", "B-2", "B-1", "Bundles!B3")}
 
 
