@@ -211,25 +211,38 @@ class _Run:
         self.bounds.add((reason, got))
 
     # -- sheets
-    def scan(self, name: str, cells: dict[tuple[int, int], _Cell]) -> None:
-        if _is_notes_sheet(name, self.cat):
-            self.structural.update(c.id for c in cells.values())  # labels, not data
-            return
-        by_row: dict[int, list[_Cell]] = {}
-        for c in cells.values():
-            by_row.setdefault(c.row, []).append(c)
-        found: tuple[int, SheetSpec] | None = None
+    def _find_header(
+        self, by_row: dict[int, list[_Cell]]
+    ) -> tuple[int, SheetSpec] | Literal["ambiguous"] | None:
         for r in sorted(by_row):
             if r > self.cat.header_scan_rows:
                 break
             heads = {header_norm(str(c.value)) for c in by_row[r] if c.kind == "string"}
             hits = [s for s in self.cat.sheets if s.signature <= heads]
             if len(hits) > 1:
-                self.bound("ambiguous_sheet", cells.values())
-                return
+                return "ambiguous"
             if hits:
-                found = (r, hits[0])
-                break
+                return (r, hits[0])
+        return None
+
+    def scan(self, name: str, cells: dict[tuple[int, int], _Cell]) -> None:
+        by_row: dict[int, list[_Cell]] = {}
+        for c in cells.values():
+            by_row.setdefault(c.row, []).append(c)
+        found = self._find_header(by_row)
+        if _is_notes_sheet(name, self.cat):
+            if found is None:
+                self.structural.update(c.id for c in cells.values())  # labels, not data
+                return
+            # a "notes" sheet that carries a real header would hide data: state it instead
+            self.structural.update(c.id for c in cells.values() if c.kind == "blank")
+            live = [c for c in cells.values() if c.kind != "blank"]
+            if live:
+                self.bound("ambiguous_sheet", live)
+            return
+        if found == "ambiguous":
+            self.bound("ambiguous_sheet", cells.values())
+            return
         if found is None:
             self.bound("unknown_sheet", cells.values())
             return
@@ -249,7 +262,12 @@ class _Run:
                     stray.setdefault(col, []).append(c.id)
         for r in sorted(by_row):
             if r <= hrow:
-                self.structural.update(c.id for c in by_row[r])
+                if r == hrow:
+                    continue  # header cells were sorted into structural or stray above
+                self.structural.update(c.id for c in by_row[r] if c.kind in ("string", "blank"))
+                odd = [c for c in by_row[r] if c.kind not in ("string", "blank")]
+                if odd:  # a number, date, error or formula above the header is data: state it
+                    self.bound("unsupported_value", odd)
                 continue
             kept: dict[int, _Cell] = {}
             blanks: dict[int, _Cell] = {}
@@ -527,16 +545,20 @@ class _Resolver:
         self.edges: dict[_EdgeKey, list[tuple[int, ...]]] = {}
         self.unresolved: list[_Unresolved] = []
 
-    def target(self, target_type: str, k: str) -> _Triple | None:
+    def target(self, target_type: str, k: str) -> _Triple | Literal["ambiguous"] | None:
         hit = self.doc.get((target_type, k))
         if hit is not None:
             return hit.triple
         if self.snapshot is not None and self.scoped.get(target_type, False):
             return None  # a snapshot export defines its own scoped objects
-        for p in (self.profile, "unknown"):
-            if (p, target_type, k) in self.known:
-                return (p, target_type, k)  # type: ignore[return-value]
-        return None
+        hits = [
+            (p, target_type, k)
+            for p in (self.profile, "unknown")
+            if (p, target_type, k) in self.known
+        ]
+        if len(hits) > 1:  # the same key as a known and an unknown entity: never guess
+            return "ambiguous"
+        return hits[0] if hits else None  # type: ignore[return-value]
 
     def reference(self, e: _Ent, role: str, c: _Cell) -> None:
         rc = self.refcols[role]
@@ -552,17 +574,20 @@ class _Resolver:
             self.run.bound("ambiguous_target", [c])
             return
         tgt = self.target(rc.target_type, k)
+        if tgt == "ambiguous":
+            self.run.bound("ambiguous_target", [c])
+            return
         if tgt is None:
             other = self.types_of_key.get(k, set()) - {rc.target_type}
             reason = _not_found_reason(other)
             self.unresolved.append((e.triple, raw, c.id, reason))
             return
+        if tgt == e.triple:  # the model rejects self loops
+            self.run.bound("self_reference", [c])
+            return
         if e.profile == "unknown" and tgt[0] == "unknown":
             # the Records invariant rejects an unknown-to-unknown relationship: state it instead
             self.unresolved.append((e.triple, raw, c.id, "unknown_profile"))
-            return
-        if tgt == e.triple:  # the model rejects self loops
-            self.run.bound("self_reference", [c])
             return
         q, qc = qual if qual is not None else (None, None)
         key: _EdgeKey = (rc.relationship_type, e.triple, tgt, q)
