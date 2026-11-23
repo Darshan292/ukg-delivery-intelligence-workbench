@@ -15,7 +15,8 @@ from pydantic import SkipValidation, ValidationError, model_validator
 from app.domain.model import Document, DocumentVersion, ProductProfile, Record
 from app.domain.records import Records
 from app.ingest.errors import DEFAULT_LIMITS, IntakeRejected, Limits
-from app.ingest.fragments import ParsedDocument
+from app.ingest.fragments import CellFragment, PageFragment, ParsedDocument, SheetFragment
+from app.ingest.pdf import parse_pdf
 from app.ingest.xlsx import parse_xlsx
 
 log = logging.getLogger(__name__)
@@ -85,16 +86,20 @@ def _ingest(
     kind = sniff_kind(data)
     if kind != declared_kind:
         raise IntakeRejected("type_mismatch")
-    if kind == "pdf":
-        raise IntakeRejected("unsupported_type")  # PDF intake lands in PR B (tasks 10 to 12)
     doc_id, ver_id = _next_id(records.documents), _next_id(records.document_versions)
-    locs, sheets, cells = parse_xlsx(
-        data,
-        version_id=ver_id,
-        first_locator_id=_next_id(records.locators),
-        now=now,
-        limits=limits,
-    )
+    parse_args = {
+        "version_id": ver_id,
+        "first_locator_id": _next_id(records.locators),
+        "now": now,
+        "limits": limits,
+    }
+    sheets: tuple[SheetFragment, ...] = ()
+    cells: tuple[CellFragment, ...] = ()
+    pages: tuple[PageFragment, ...] = ()
+    if kind == "pdf":
+        locs, pages = parse_pdf(data, **parse_args)  # type: ignore[arg-type]
+    else:
+        locs, sheets, cells = parse_xlsx(data, **parse_args)  # type: ignore[arg-type]
     try:
         new = records.extended(
             documents=(Document(id=doc_id, product_profile=product_profile, title=title),),
@@ -114,9 +119,10 @@ def _ingest(
         parsed = ParsedDocument(
             document_version_id=ver_id,
             product_profile=product_profile,
-            kind="xlsx",
+            kind=kind,
             sheets=sheets,
             cells=cells,
+            pages=pages,
         )
         return Ingested(records=new, parsed=parsed)
     except (ValidationError, ValueError):

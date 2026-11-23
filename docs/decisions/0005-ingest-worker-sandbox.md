@@ -49,3 +49,11 @@ can differ run to run near the limit.
   loop.
 - Linux only (`resource`); CI is Ubuntu.
 - The limits are placeholders set by the team, not measured (Q7).
+
+## PDF (PR B)
+
+`app/ingest/pdf.py` reuses `run_sandboxed` with `pdf_total_seconds` and `pdf_memory_bytes` in
+place of the worker values; pdfplumber is imported only inside the child. A wall-clock timeout
+or an oversized reply is `resource_limit`; the in-child per-page budget is `pdf_timeout`.
+Follow-up: pypdfium2 publishes musl wheels that uv cannot exclude cleanly (no libc marker),
+so the exception and NOTICE state glibc only; CI and Docker use Ubuntu.

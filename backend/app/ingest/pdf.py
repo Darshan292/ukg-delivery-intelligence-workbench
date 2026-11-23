@@ -10,10 +10,13 @@ JavaScript are never read.
 
 import dataclasses
 import time
+from datetime import datetime
 from io import BytesIO
 from typing import Any
 
+from app.domain.locators import PdfWordBbox
 from app.ingest.errors import IntakeRejected, Limits
+from app.ingest.fragments import PageFragment
 from app.ingest.sandbox import run_sandboxed
 
 
@@ -23,11 +26,19 @@ def extract_pdf(data: bytes, limits: Limits) -> object:
 
     start = time.monotonic()
     pages: list[list[Any]] = []
+    n_words = 0
     with pdfplumber.open(BytesIO(data)) as pdf:
-        for page in pdf.pages:
+        if len(pdf.pages) > limits.pdf_max_pages:  # before any page is parsed
+            raise IntakeRejected("pdf_too_many_pages")
+        if sum(len(list(x.get_objids())) for x in pdf.doc.xrefs) > limits.pdf_max_objects:
+            raise IntakeRejected("pdf_too_many_objects")
+        for done, page in enumerate(pdf.pages, 1):
             words = page.extract_words(
                 x_tolerance=3, y_tolerance=3, keep_blank_chars=False, use_text_flow=False
             )
+            n_words += len(words)
+            if n_words > limits.pdf_max_words:
+                raise IntakeRejected("pdf_too_many_words")
             pages.append(
                 [
                     page.page_number,
@@ -36,9 +47,10 @@ def extract_pdf(data: bytes, limits: Limits) -> object:
                     [[w["text"], w["x0"], w["top"], w["x1"], w["bottom"]] for w in words],
                 ]
             )
+            if time.monotonic() - start > limits.pdf_page_seconds * done:
+                raise IntakeRejected("pdf_timeout")
     if not pages:
         raise IntakeRejected("pdf_malformed")
-    _ = start
     return pages
 
 
@@ -51,3 +63,41 @@ def run_pdf_worker(data: bytes, limits: Limits) -> list[Any]:
     )
     out: list[Any] = run_sandboxed(extract_pdf, data, sandbox_limits, on_error="pdf_malformed")
     return out
+
+
+EXTRACTOR = "pdf_words@1"
+
+
+def parse_pdf(
+    data: bytes, *, version_id: int, first_locator_id: int, now: datetime, limits: Limits
+) -> tuple[tuple[PdfWordBbox, ...], tuple[PageFragment, ...]]:
+    raw = run_pdf_worker(data, limits)
+    locs: list[PdfWordBbox] = []
+    pages: list[PageFragment] = []
+    try:
+        for page, width, height, words in raw:
+            ids: list[int] = []
+            for text, x0, top, x1, bottom in words:
+                i = first_locator_id + len(locs)
+                locs.append(
+                    PdfWordBbox(
+                        id=i,
+                        document_version_id=version_id,
+                        snippet=text,
+                        extractor=EXTRACTOR,
+                        extracted_at=now,
+                        kind="pdf_word_bbox",
+                        page=page,  # pdfplumber page_number: 1-based
+                        x0=x0,
+                        top=top,
+                        x1=x1,
+                        bottom=bottom,
+                    )
+                )
+                ids.append(i)
+            pages.append(
+                PageFragment(page=page, width=width, height=height, word_locator_ids=tuple(ids))
+            )
+    except Exception:  # a hostile reply must never leak a pydantic error carrying content
+        raise IntakeRejected("pdf_malformed") from None
+    return tuple(locs), tuple(pages)

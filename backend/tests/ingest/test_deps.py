@@ -11,7 +11,6 @@ def test_openpyxl_routes_xml_through_defusedxml() -> None:
 def test_pdfplumber_importable_lazily() -> None:
     import subprocess
     import sys
-
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]

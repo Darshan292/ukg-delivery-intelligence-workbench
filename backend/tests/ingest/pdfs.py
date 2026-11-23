@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
 """Test-only. FICTIONAL: tiny hand-written PDFs (Helvetica text, a classic xref table)."""
 
+from collections.abc import Sequence
+
 Word = tuple[float, float, str]  # x, y (from the bottom), text
 
 
@@ -31,7 +33,7 @@ def build_pdf(objs: dict[int, bytes], root: int = 1, trailer_extra: bytes = b"")
 
 
 def make_pdf(
-    pages: list[list[Word]],
+    pages: Sequence[Sequence[Word]],
     *,
     size: tuple[int, int] = (612, 792),
     extra_objects: int = 0,

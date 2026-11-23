@@ -29,9 +29,9 @@ def procs(monkeypatch: pytest.MonkeyPatch) -> Procs:
     return made
 
 
-def _reason(data: bytes, limits: Limits = Limits()) -> IntakeRejected:
+def _reason(data: bytes, limits: Limits | None = None) -> IntakeRejected:
     with pytest.raises(IntakeRejected) as ei:
-        run_pdf_worker(data, limits)
+        run_pdf_worker(data, limits or Limits())
     return ei.value
 
 
