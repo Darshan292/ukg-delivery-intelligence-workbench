@@ -117,14 +117,25 @@ def save(
     r: Records,
     fields: Collection[str] = ALL,
     lineage: bool | None = None,
+    since: Records | None = None,
 ) -> None:
     """`lineage` splits document versions: False saves only plain ones, True only those that
     supersede another (a human act, so the ingest role cannot write them), None saves both.
-    """
+
+    `since` is a `Records` this one extended (`Records.extended` appends): only the rows `r` has
+    beyond it are written. A delta alone is not a valid `Records` (its references dangle), so the
+    full `r` is validated by construction and its suffix is what reaches the database."""
+    start = {f: 0 for f in ALL}
+    if since is not None:  # every prefix is checked before the first statement runs
+        for f in ALL:
+            old, new = getattr(since, f), getattr(r, f)
+            if new[: len(old)] != old:
+                raise ValueError("save: since is not a prefix")
+            start[f] = len(old)
     for field in ALL:  # Records field order is FK order
         if field not in fields:
             continue
-        items = getattr(r, field)
+        items = getattr(r, field)[start[field] :]
         if field == "catalogues":
             _save_catalogues(conn, items)
         elif field == "review_events":
