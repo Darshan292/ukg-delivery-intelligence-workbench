@@ -197,6 +197,34 @@ class UnresolvedReference(Record):
     reason: Literal["missing_target", "uncatalogued_type", "unknown_profile"]
 
 
+BoundaryReason = Literal[
+    "unknown_sheet",
+    "ambiguous_sheet",
+    "unrecognised_column",
+    "missing_key",
+    "duplicate_key",
+    "duplicate_value",
+    "ambiguous_target",
+    "self_reference",
+    "missing_qualifier",
+    "no_cached_value",
+    "error_value",
+    "unsupported_value",
+    "invalid_profile",
+    # decisions 0003 Q7 and 0007: the entity itself is stated as an extraction boundary
+    "unknown_profile_entity",
+]
+
+
+class ExtractionBoundary(Record):
+    """Something extraction could not model, stated rather than dropped (decision T1)."""
+
+    id: Id
+    document_version_id: Id
+    reason: BoundaryReason
+    locator_ids: SortedIds
+
+
 class EntityTypeSpec(Record):
     name: NonBlank
     snapshot_scoped: bool
