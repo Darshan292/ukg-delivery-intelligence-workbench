@@ -20,18 +20,21 @@ from app.domain.records import Records
 from app.main import create_app
 from app.store import ALL, save
 
-_MIG = Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0002_d3_schema.py"
+_VERSIONS = Path(__file__).resolve().parent.parent / "migrations" / "versions"
 
 
-def _load_migration() -> Any:
-    spec = importlib.util.spec_from_file_location("mig0002", _MIG)
+def _load_migration(file: str) -> Any:
+    spec = importlib.util.spec_from_file_location(f"mig_{file[:4]}", _VERSIONS / file)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-TABLES: tuple[str, ...] = _load_migration().TABLES
+TABLES: tuple[str, ...] = (
+    *_load_migration("0002_d3_schema.py").TABLES,
+    *_load_migration("0003_extraction_boundary.py").TABLES,
+)
 
 
 @contextmanager

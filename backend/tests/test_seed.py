@@ -25,6 +25,7 @@ EXPECTED = {
     "claim": 2,
     "review_event": 0,
     "unresolved_reference": 0,
+    "extraction_boundary": 0,
 }
 
 
