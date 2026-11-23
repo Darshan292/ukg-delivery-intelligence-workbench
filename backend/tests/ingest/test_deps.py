@@ -17,7 +17,7 @@ def _loaded_after_importing(module: str, names: tuple[str, ...]) -> list[str]:
     root = Path(__file__).resolve().parents[2]
     code = (
         f"import sys; sys.path.insert(0, {str(root)!r}); import {module}; "
-        f"print(__import__('json').dumps([m in sys.modules if m.split('.')[0] in {names!r}]))"
+        f"print(__import__('json').dumps([m for m in sys.modules if m.split('.')[0] in {names!r}]))"
     )
     done = subprocess.run(  # noqa: S603  (fixed argv)
         [sys.executable, "-I", "-c", code], cwd="/", env={}, capture_output=True, check=True
