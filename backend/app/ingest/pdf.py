@@ -24,13 +24,22 @@ from app.ingest.sandbox import run_sandboxed
 def extract_pdf(data: bytes, limits: Limits) -> object:
     """Runs in the sandbox child. Any exception other than IntakeRejected becomes pdf_malformed."""
     import pdfplumber  # noqa: PLC0415  (lazy: after the child's rlimits, never in the parent)
+    from pdfminer.pdfdocument import PDFEncryptionError  # noqa: PLC0415
     from pdfminer.pdfpage import PDFPage  # noqa: PLC0415
+    from pdfplumber.utils.exceptions import PdfminerException  # noqa: PLC0415
 
     start = time.monotonic()
     pages: list[list[Any]] = []
     n_words = 0
     # no `with`: PDF.close() walks pdf.pages, which builds every Page; the child exits anyway
-    pdf = pdfplumber.open(BytesIO(data))
+    try:
+        pdf = pdfplumber.open(BytesIO(data))
+    except PdfminerException as e:  # pdfplumber wraps pdfminer's error; a wrong password too
+        if isinstance(e.args[0] if e.args else None, PDFEncryptionError):
+            raise IntakeRejected("pdf_encrypted") from None
+        raise
+    if pdf.doc.encryption is not None:  # even with an empty user password: refused
+        raise IntakeRejected("pdf_encrypted")
     if sum(len(list(x.get_objids())) for x in pdf.doc.xrefs) > limits.pdf_max_objects:
         raise IntakeRejected("pdf_too_many_objects")
     # count lazily, stopping at cap + 1: pdf.pages would build every Page object first

@@ -32,6 +32,7 @@ Reason = Literal[
     "pdf_timeout",
     "pdf_resource_limit",
     "pdf_malformed",
+    "pdf_encrypted",
     "pdf_worker_failed",
     "package_inconsistent",
     "resource_limit",

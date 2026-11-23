@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Darshan U Shetty and contributors
+import hashlib
+import struct
 import time
 from datetime import UTC, datetime
 from io import BytesIO
@@ -138,17 +140,52 @@ def test_garbage_and_truncated() -> None:
     _rejects(data[: len(data) // 2], "pdf_malformed")
 
 
-def test_encrypted_pdf() -> None:
+def _rc4(key: bytes, data: bytes) -> bytes:
+    sbox, j = list(range(256)), 0
+    for i in range(256):
+        j = (j + sbox[i] + key[i % len(key)]) % 256
+        sbox[i], sbox[j] = sbox[j], sbox[i]
+    out, i, j = bytearray(), 0, 0
+    for byte in data:
+        i = (i + 1) % 256
+        j = (j + sbox[i]) % 256
+        sbox[i], sbox[j] = sbox[j], sbox[i]
+        out.append(byte ^ sbox[(sbox[i] + sbox[j]) % 256])
+    return bytes(out)
+
+
+def _empty_password_rc4_pdf() -> bytes:
+    """40-bit RC4 (V1 R2) with an EMPTY user password: it opens without any password."""
+    pad = bytes.fromhex("28BF4E5E4E758A4164004E56FFFA01082E2E00B6D0683E802F0CA9FE6453697A")
+    owner, ident, perms = b"o" * 32, b"0123456789abcdef", -4
+    key = hashlib.md5(pad + owner + struct.pack("<i", perms) + ident).digest()[:5]  # noqa: S324
+    user = _rc4(key, pad)
+    enc = b"<< /Filter /Standard /V 1 /R 2 /P %d /O <%s> /U <%s> >>" % (
+        perms,
+        owner.hex().encode(),
+        user.hex().encode(),
+    )
+    objs = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: b"<< /Type /Pages /Count 1 /Kids [4 0 R] >>",
+        3: enc,
+        4: b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>",
+    }
+    h = ident.hex().encode()
+    return build_pdf(objs, trailer_extra=b"/Encrypt 3 0 R /ID [<%s> <%s>]" % (h, h))
+
+
+def test_encrypted_pdf_with_empty_password_is_refused() -> None:
+    _rejects(_empty_password_rc4_pdf(), "pdf_encrypted")
+
+
+def test_encrypted_pdf_with_unknown_password_is_refused() -> None:
     objs = {
         1: b"<< /Type /Catalog /Pages 2 0 R >>",
         2: b"<< /Type /Pages /Count 0 /Kids [] >>",
-        3: b"<< /Filter /Standard /V 1 /R 2 /P -4 /O ("
-        + b"a" * 32
-        + b") /U ("
-        + b"b" * 32
-        + b") >>",
+        3: b"<< /Filter /Standard /V 1 /R 2 /P -4 /O (%s) /U (%s) >>" % (b"a" * 32, b"b" * 32),
     }
-    _rejects(build_pdf(objs, trailer_extra=b"/Encrypt 3 0 R /ID [(a)(b)]"), "pdf_malformed")
+    _rejects(build_pdf(objs, trailer_extra=b"/Encrypt 3 0 R /ID [(a)(b)]"), "pdf_encrypted")
 
 
 def test_huge_page_count() -> None:
