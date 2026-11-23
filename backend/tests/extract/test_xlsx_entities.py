@@ -95,3 +95,21 @@ def test_profile_or_catalogue_mismatch() -> None:
     )  # fmt: skip
     with pytest.raises(CatalogueMismatch):
         run(build, sheets=SHEETS.model_copy(update={"sheets": (SHEETS.sheets[0], bad)}))
+
+
+def test_invariant_rejects_structural_id_of_another_version() -> None:
+    def a(wb: Workbook) -> None:
+        put(wb, "Limits", [HEAD, ["L-1", 40, "w"]])
+
+    def b(wb: Workbook) -> None:
+        put(wb, "Limits", [HEAD, ["L-2", 41, "w"]])
+
+    _, x1 = run(a, snapshot_id=1)
+    ing, x2 = run(b, records=x1.records, snapshot_id=2)
+    foreign = x1.records.locators[0].id  # a locator of the first version
+    with pytest.raises(ValidationError):
+        Extracted(
+            records=x2.records,
+            document_version_id=ing.parsed.document_version_id,
+            structural_locator_ids=tuple(sorted({*x2.structural_locator_ids, foreign})),
+        )

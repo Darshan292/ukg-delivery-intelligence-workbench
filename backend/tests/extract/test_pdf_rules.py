@@ -5,6 +5,7 @@
 from decimal import Decimal
 
 from tests.extract.pdf_helpers import line, pdf_edges, pdf_run
+from tests.ingest.pdfs import Word
 
 
 def test_comention_claim() -> None:
@@ -76,6 +77,8 @@ def test_value_match_unscoped_pdf_sees_any_version() -> None:
 
 def test_line_tolerance_is_measured_from_the_first_word_of_the_line() -> None:
     # tops drift 1.5 points per word: each step is inside the 2.0 tolerance, the whole is not
-    drift = [(72 + 60 * i, 700 - 1.5 * i, w) for i, w in enumerate(["B-1", "a", "b", "L-1"])]
+    drift: list[Word] = [
+        (72 + 60 * i, 700 - 1.5 * i, w) for i, w in enumerate(["B-1", "a", "b", "L-1"])
+    ]
     _, x = pdf_run([drift])
     assert pdf_edges(x) == set()
