@@ -23,6 +23,7 @@ from pydantic import SkipValidation, model_validator
 from app.domain.locators import XlsxCell
 from app.domain.model import (
     Attribute,
+    Basis,
     BoundaryReason,
     Claim,
     Entity,
@@ -96,6 +97,8 @@ class _Cell:
     span: tuple[int, int]  # columns a merged header covers (anchor only); else (col, col)
 
 
+# owner question S4-P5 (pending): a formula without a cached value is a `no_cached_value`
+# boundary; the attribute is omitted and the formula is never evaluated or parsed.
 _BAD: dict[str, BoundaryReason] = {"no_cached": "no_cached_value", "error": "error_value"}
 
 
@@ -103,8 +106,37 @@ def _bad_reason(kind: str) -> BoundaryReason:
     return _BAD.get(kind, "unsupported_value")
 
 
+# owner question S4-P3 (pending): hidden rows, columns and sheets are ordinary data
+def _extractable(row_hidden: bool, column_hidden: bool, sheet_state: str) -> bool:
+    """hidden rows, columns and sheets are ordinary data
+    (hidden is not deleted). The flags live in the IR only; they are not persisted in M1."""
+    return True
+
+
+# owner question S4-P6 (pending): a declared notes sheet is structural, no boundary
+def _is_notes_sheet(name: str, cat: SheetCatalogue) -> bool:
+    """a declared notes sheet (the FICTIONAL label) is
+    structural and states no boundary; any other unrecognised sheet is one unknown_sheet."""
+    return header_norm(name) in {header_norm(n) for n in cat.notes_sheets}
+
+
+# owner question S4-P2 (pending): alias spelling is missing_target, verbatim, no folding
+def _not_found_reason(other_types_with_key: set[str]) -> UnresolvedReason:
+    """an alias spelling (`l-1` for `L-1`) is `missing_target`
+    with the verbatim text: no case folding and no same_as suggestion in Milestone 1."""
+    return "uncatalogued_type" if other_types_with_key else "missing_target"
+
+
+# owner question S4-P4 (pending): explicit asserts_value columns give an explicit_source claim
+def _assertion_basis() -> Basis:
+    """an asserts_value relationship from explicit object and
+    attribute columns is an `explicit_source` claim (established), not a value-match rule."""
+    return "explicit_source"
+
+
 def _load(records: Records, parsed: ParsedDocument) -> dict[str, dict[tuple[int, int], _Cell]]:
     sheets: dict[str, dict[tuple[int, int], _Cell]] = {}
+    state = {s.name: s.state for s in parsed.sheets}
     for f in parsed.cells:
         loc = records.locator_by_id[f.locator_id]
         if not isinstance(loc, XlsxCell):
@@ -117,6 +149,8 @@ def _load(records: Records, parsed: ParsedDocument) -> dict[str, dict[tuple[int,
             kind = "string" if str(f.value).strip() else "blank"
         else:
             kind = f.value_type
+        if not _extractable(f.row_hidden, f.column_hidden, state.get(loc.sheet, "visible")):
+            kind = "blank"
         span = (col, col)
         if f.merged_range:
             lo, _, hi, _ = range_boundaries(f.merged_range)
@@ -178,7 +212,7 @@ class _Run:
 
     # -- sheets
     def scan(self, name: str, cells: dict[tuple[int, int], _Cell]) -> None:
-        if header_norm(name) in {header_norm(n) for n in self.cat.notes_sheets}:
+        if _is_notes_sheet(name, self.cat):
             self.structural.update(c.id for c in cells.values())  # labels, not data
             return
         by_row: dict[int, list[_Cell]] = {}
@@ -367,7 +401,7 @@ def _finish(run: _Run) -> Extracted:
         Claim(
             id=i,
             relationship_id=rel_id[k],
-            basis="explicit_source",
+            basis=_assertion_basis() if k[3] is not None else "explicit_source",
             polarity="present",
             method=cat.method,
             confidence=None,
@@ -520,7 +554,7 @@ class _Resolver:
         tgt = self.target(rc.target_type, k)
         if tgt is None:
             other = self.types_of_key.get(k, set()) - {rc.target_type}
-            reason: UnresolvedReason = "uncatalogued_type" if other else "missing_target"
+            reason = _not_found_reason(other)
             self.unresolved.append((e.triple, raw, c.id, reason))
             return
         if e.profile == "unknown" and tgt[0] == "unknown":
